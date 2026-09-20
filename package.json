@@ -1,0 +1,46 @@
+{
+  "name": "chatbase-india",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI support-agent builder (RAG chatbots for your website/WhatsApp) - MVP",
+  "engines": {
+    "node": ">=22.9",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
+    "preflight": "node --env-file-if-exists=.env scripts/preflight.mjs",
+    "smoke": "node scripts/smoke-test.mjs",
+    "smoke:whatsapp": "node --env-file-if-exists=.env scripts/smoke-whatsapp.mjs",
+    "smoke:handoff": "node --env-file-if-exists=.env scripts/smoke-handoff.mjs",
+    "smoke:embedded": "node --env-file-if-exists=.env scripts/smoke-embedded.mjs",
+    "smoke:sarvam": "node --env-file-if-exists=.env scripts/smoke-sarvam.mjs",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test scripts/unit-tests.mjs",
+    "razorpay:setup": "node --experimental-strip-types --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/razorpay-setup.mjs",
+    "smoke:billing": "node --env-file-if-exists=.env scripts/smoke-billing.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cheerio": "^1.2.0",
+    "jose": "^6.2.12",
+    "next": "^15.5.25",
+    "nodemailer": "^10.0.10",
+    "pg": "^8.23.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "unpdf": "^1.8.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5.9.3"
+  }
+}
