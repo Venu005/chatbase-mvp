@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { HttpError, clientIp, handle, rateLimit } from "@/lib/http";
 import { getUser } from "@/lib/auth";
+import { q1 } from "@/lib/db";
 import { getLLM } from "@/lib/providers";
 import { loadAgent, prepareAnswer, saveAnswer, usedCitations } from "@/lib/answer";
 import { refundCredit } from "@/lib/usage";
@@ -21,7 +22,7 @@ const schema = z.object({
 /**
  * Public endpoint for the embeddable widget; the dashboard playground (channel "playground") needs the owner's session.
  * Streams newline-delimited JSON:
- *   {"type":"delta","text":"..."}  ...  {"type":"done","citations":[...]}   or   {"type":"error","message":"..."}
+ *   {"type":"delta","text":"..."}  ...  {"type":"done","citations":[...],"messageId":123}   or   {"type":"error","message":"..."}
  * When a person (not the bot) is handling the conversation the stream is just
  *   {"type":"handoff","notice":"..."|null}  {"type":"done","citations":[]}
  * and the widget then polls GET /api/chat/:agentId/messages for the owner's replies.
@@ -38,6 +39,11 @@ export const POST = handle<Ctx>(async (req, { params }) => {
   if (!agent) throw new HttpError(404, "Agent not found");
   // The playground skips human handoff, so only the agent's owner (signed in to the dashboard) may use it.
   if (channel === "playground" && (await getUser())?.id !== agent.user_id) throw new HttpError(403, "The playground is only available to the agent's owner");
+
+  // "Details before chatting": the widget shows the form first; refuse messages that skipped it.
+  if (channel === "widget" && agent.lead_mode === "before_chat" && !(await q1("SELECT 1 FROM leads WHERE agent_id = $1 AND session_id = $2", [agentId, sessionId]))) {
+    throw new HttpError(428, "Please share your details before starting the chat.");
+  }
 
   const prepared = await prepareAnswer(agent, sessionId, channel, message); // reserves a credit; refunds itself on error
 
@@ -59,19 +65,22 @@ export const POST = handle<Ctx>(async (req, { params }) => {
     async start(controller) {
       let answer = "";
       let failed = false;
+      let saved = false;
       try {
         for await (const delta of llm.stream({ system: prepared.system, messages: prepared.history, signal: abort.signal })) {
           answer += delta;
           controller.enqueue(line({ type: "delta", text: delta }));
         }
         if (!answer.trim()) throw new Error("The model returned an empty reply");
-        controller.enqueue(line({ type: "done", citations: usedCitations(answer, prepared.citations), conversationId: prepared.conversationId }));
+        saved = true;
+        const messageId = await saveAnswer(prepared, answer).catch((e) => (console.error("Saving reply failed:", e), null));
+        controller.enqueue(line({ type: "done", citations: usedCitations(answer, prepared), conversationId: prepared.conversationId, messageId }));
       } catch (e) {
         failed = !answer;
         console.error("Chat generation failed:", e);
         if (!abort.signal.aborted) controller.enqueue(line({ type: "error", message: "Sorry, I couldn't answer that right now. Please try again." }));
       } finally {
-        if (answer.trim()) await saveAnswer(prepared, answer).catch((e) => console.error("Saving reply failed:", e));
+        if (!saved && answer.trim()) await saveAnswer(prepared, answer).catch((e) => console.error("Saving reply failed:", e)); // partial answer (client left or stream broke)
         if (failed) await refundCredit(agent.user_id).catch(() => {});
         try {
           controller.close();

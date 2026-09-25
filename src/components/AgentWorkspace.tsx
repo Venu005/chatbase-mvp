@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, json } from "@/lib/client";
 import ChatBox from "./ChatBox";
+import FixForm from "./FixForm";
+import Markdown from "./Markdown";
+import Analytics from "./Analytics";
+import Leads from "./Leads";
 
 type Agent = {
   id: string;
@@ -15,6 +19,9 @@ type Agent = {
   handoff_message: string;
   notify_email: boolean;
   allowed_domains: string[];
+  lead_mode: "off" | "after_first_answer" | "before_chat";
+  lead_fields: ("name" | "email" | "phone")[];
+  lead_message: string;
 };
 type Source = { id: string; type: string; title: string; url: string | null; status: "processing" | "ready" | "failed"; error: string | null; char_count: number; chunk_count: number };
 type Convo = {
@@ -22,6 +29,7 @@ type Convo = {
   channel: string;
   updated_at: string;
   message_count: number;
+  thumbs_down: number;
   first_message: string | null;
   last_visitor_message: string | null;
   mode: "bot" | "human";
@@ -29,9 +37,10 @@ type Convo = {
   contact: string | null;
   handoff_reason: string | null;
 };
-type Message = { id: number; role: string; content: string; created_at: string };
+type Message = { id: number; role: string; content: string; created_at: string; feedback: 1 | -1 | null; bot: boolean; fixed: boolean };
+type Fix = { id: string; question: string; answer: string; message_id: string | null; updated_at: string };
 
-const TABS = ["Sources", "Playground", "Settings", "Embed", "WhatsApp", "Chats"] as const;
+const TABS = ["Sources", "Q&A", "Playground", "Settings", "Embed", "WhatsApp", "Chats", "Leads", "Analytics"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function AgentWorkspace({ id }: { id: string }) {
@@ -91,6 +100,7 @@ export default function AgentWorkspace({ id }: { id: string }) {
         ))}
       </nav>
       {tab === "Sources" && <SourcesTab agentId={id} />}
+      {tab === "Q&A" && <QATab agentId={id} />}
       {tab === "Playground" && (
         <div className="card playground">
           <ChatBox key={version} agentId={id} welcome={agent.welcome_message} color={agent.brand_color} channel="playground" />
@@ -107,6 +117,18 @@ export default function AgentWorkspace({ id }: { id: string }) {
       )}
       {tab === "Embed" && <EmbedTab agent={agent} onSaved={load} />}
       {tab === "WhatsApp" && <WhatsAppTab agentId={id} />}
+      {tab === "Analytics" && <Analytics agentId={id} />}
+      {tab === "Leads" && (
+        <Leads
+          agentId={id}
+          leadMode={agent.lead_mode}
+          openChat={(cid) => {
+            // The Chats tab opens the conversation named in ?c= when it mounts (same as the e-mail links).
+            window.history.replaceState(null, "", `?c=${cid}#chats`);
+            setTab("Chats");
+          }}
+        />
+      )}
       {tab === "Chats" && <ChatsTab agentId={id} convos={convos} refresh={loadConvos} handoffEnabled={agent.handoff_enabled} />}
     </main>
   );
@@ -245,6 +267,9 @@ function SettingsTab({ agent, onSaved }: { agent: Agent; onSaved: () => void }) 
     handoffEnabled: agent.handoff_enabled,
     handoffMessage: agent.handoff_message,
     notifyEmail: agent.notify_email,
+    leadMode: agent.lead_mode,
+    leadFields: agent.lead_fields,
+    leadMessage: agent.lead_message,
   });
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
@@ -293,6 +318,41 @@ function SettingsTab({ agent, onSaved }: { agent: Agent; onSaved: () => void }) 
             <input type="checkbox" checked={f.notifyEmail} onChange={(e) => setF({ ...f, notifyEmail: e.target.checked })} />
             E-mail me when a customer is waiting for a reply
           </label>
+        </>
+      )}
+      <h3>Collect leads</h3>
+      <label>
+        Ask website visitors for their details
+        <select value={f.leadMode} onChange={(e) => setF({ ...f, leadMode: e.target.value as Agent["lead_mode"] })}>
+          <option value="off">Don&apos;t ask</option>
+          <option value="after_first_answer">After the first answer (visitors can skip)</option>
+          <option value="before_chat">Before the chat starts (required)</option>
+        </select>
+      </label>
+      {f.leadMode !== "off" && (
+        <>
+          <div className="row-form">
+            {(["name", "email", "phone"] as const).map((field) => (
+              <label key={field} className="check">
+                <input
+                  type="checkbox"
+                  checked={f.leadFields.includes(field)}
+                  onChange={(e) =>
+                    setF({ ...f, leadFields: e.target.checked ? [...f.leadFields, field] : f.leadFields.filter((x) => x !== field) })
+                  }
+                />
+                {field === "name" ? "Name" : field === "email" ? "E-mail" : "Phone"}
+              </label>
+            ))}
+          </div>
+          <label>
+            Message above the form
+            <input value={f.leadMessage} onChange={(e) => setF({ ...f, leadMessage: e.target.value })} required maxLength={300} />
+          </label>
+          <span className="muted small">
+            WhatsApp customers are always saved as leads (with their number), and so are contact details left when asking for a
+            person. {f.notifyEmail ? "You get an e-mail for each new lead from the form." : ""}
+          </span>
         </>
       )}
       {error && <p className="error-text">{error}</p>}
@@ -554,6 +614,14 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [onlyWaiting, setOnlyWaiting] = useState(false);
+  const [fixing, setFixing] = useState<{ messageId: number; question: string; answer: string } | null>(null);
+
+  function startFix(m: Message) {
+    const msgs = detail?.messages ?? [];
+    const i = msgs.findIndex((x) => x.id === m.id);
+    const question = [...msgs.slice(0, i)].reverse().find((x) => x.role === "user")?.content ?? "";
+    setFixing({ messageId: m.id, question, answer: m.content.replace(/\s*\[\d{1,2}\]/g, "") });
+  }
 
   const loadDetail = useCallback(
     async (cid: string) => {
@@ -575,6 +643,7 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
     if (!open) return;
     setDetail(null);
     setError("");
+    setFixing(null);
     void loadDetail(open);
     const t = setInterval(() => void loadDetail(open), 4000);
     return () => clearInterval(t);
@@ -629,6 +698,7 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
                 <span>
                   {v.needs_reply && <span className="badge alert">Needs reply</span>}
                   {!v.needs_reply && v.mode === "human" && <span className="badge team">With team</span>}
+                  {v.thumbs_down > 0 && <span className="badge failed" title="Answers the visitor marked as not helpful">👎 {v.thumbs_down}</span>}
                   {v.contact && <span className="muted small"> {v.contact}</span>}
                 </span>
                 <strong>{(v.needs_reply ? v.last_visitor_message : v.first_message)?.slice(0, 80) ?? "(empty)"}</strong>
@@ -655,9 +725,29 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
               </div>
               <div className="transcript-scroll">
                 {detail.messages.map((m) => (
-                  <p key={m.id} className={`msg ${m.role}`}>
-                    <strong>{m.role === "user" ? "Customer" : m.role === "human" ? "You" : "Assistant"}:</strong> {m.content}
-                  </p>
+                  <div key={m.id} className={`msg ${m.role}`}>
+                    <strong>{m.role === "user" ? "Customer" : m.role === "human" ? "You" : "Assistant"}:</strong>{" "}
+                    {m.role === "assistant" ? <Markdown text={m.content} /> : m.content}
+                    {m.feedback === 1 && <span className="small muted" title="The visitor found this helpful"> 👍</span>}
+                    {m.feedback === -1 && <span className="small error-text" title="The visitor marked this as not helpful"> 👎 not helpful</span>}
+                    {m.role === "assistant" && m.bot && (m.fixed ? (
+                      <span className="small ok-text"> ✓ Fixed</span>
+                    ) : fixing?.messageId !== m.id && (
+                      <> <button type="button" className="link-btn small" onClick={() => startFix(m)}>Fix this answer</button></>
+                    ))}
+                    {fixing?.messageId === m.id && (
+                      <FixForm
+                        agentId={agentId}
+                        initial={fixing}
+                        hint="Next time a customer asks this (or something that means the same), the assistant gives your answer, in their language."
+                        onCancel={() => setFixing(null)}
+                        onSaved={() => {
+                          setFixing(null);
+                          void loadDetail(open!);
+                        }}
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
               <form className="reply-form" onSubmit={send}>
@@ -673,5 +763,74 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+function QATab({ agentId }: { agentId: string }) {
+  const [fixes, setFixes] = useState<Fix[] | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      setFixes((await api<{ fixes: Fix[] }>(`/api/agents/${agentId}/fixes`)).fixes);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, [agentId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function remove(id: string) {
+    if (!window.confirm("Delete this answer? The assistant will go back to answering from your sources.")) return;
+    await api(`/api/agents/${agentId}/fixes/${id}`, { method: "DELETE" }).catch((e) => setError(e.message));
+    await load();
+  }
+
+  return (
+    <section>
+      <div className="card stack">
+        <h3>Add a question and answer</h3>
+        <p className="muted">
+          Answers you write here win over everything in your sources. Use them for common questions, and to correct the
+          assistant: in <strong>Chats</strong>, press <em>Fix this answer</em> under any reply.
+        </p>
+        <FixForm agentId={agentId} initial={{ question: "", answer: "" }} onSaved={load} />
+      </div>
+      {error && <p className="error-text">{error}</p>}
+      <ul className="list">
+        {fixes?.length === 0 && <li className="muted">No answers yet.</li>}
+        {fixes?.map((f) => (
+          <li key={f.id} className="card">
+            {editing === f.id ? (
+              <FixForm
+                agentId={agentId}
+                fixId={f.id}
+                initial={f}
+                onCancel={() => setEditing(null)}
+                onSaved={() => {
+                  setEditing(null);
+                  void load();
+                }}
+              />
+            ) : (
+              <div className="source">
+                <div>
+                  <strong>{f.question}</strong>
+                  <div className="msg">{f.answer}</div>
+                  <div className="muted small">
+                    {f.message_id ? "Fixed from a conversation" : "Added by you"} · {new Date(f.updated_at).toLocaleDateString("en-IN")}
+                  </div>
+                </div>
+                <button className="link-btn" onClick={() => setEditing(f.id)}>Edit</button>
+                <button className="link-btn" onClick={() => remove(f.id)}>Delete</button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

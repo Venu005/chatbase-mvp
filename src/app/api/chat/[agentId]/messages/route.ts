@@ -30,16 +30,17 @@ export const GET = handle<Ctx>(async (req, { params }) => {
     "SELECT id, mode, visitor_contact IS NOT NULL AS has_contact FROM conversations WHERE agent_id = $1 AND session_id = $2",
     [agentId, p.sessionId]
   );
-  if (!convo) return NextResponse.json({ mode: "bot", hasContact: false, messages: [] });
+  const hasLead = !!(await q1("SELECT 1 FROM leads WHERE agent_id = $1 AND session_id = $2", [agentId, p.sessionId]));
+  if (!convo) return NextResponse.json({ mode: "bot", hasContact: false, hasLead, messages: [] });
 
   const messages =
     p.all === "1"
       ? await q(
-          `SELECT id, role, content, citations, created_at FROM (
-             SELECT id, role, content, citations, created_at FROM messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT 100
+          `SELECT id, role, content, citations, feedback, latency_ms IS NOT NULL AS rateable, created_at FROM (
+             SELECT id, role, content, citations, feedback, latency_ms, created_at FROM messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT 100
            ) t ORDER BY id`,
           [convo.id]
         )
       : await q("SELECT id, role, content, created_at FROM messages WHERE conversation_id = $1 AND role = 'human' AND id > $2 ORDER BY id LIMIT 50", [convo.id, p.after]);
-  return NextResponse.json({ mode: convo.mode, hasContact: convo.has_contact, messages });
+  return NextResponse.json({ mode: convo.mode, hasContact: convo.has_contact, hasLead, messages });
 });

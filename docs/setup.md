@@ -66,6 +66,8 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `SARVAM_API_KEY`, `SARVAM_BASE_URL` | base: `https://api.sarvam.ai/v1` | For `LLM_PROVIDER=sarvam`. |
 | `SARVAM_REASONING_EFFORT` | service default | `none` (recommended for support answers), `low`, `medium` or `high`. |
 | `SARVAM_MAX_TOKENS` | `1024` | Maximum length of one answer. |
+| `VOICE_NOTES` | on when `SARVAM_API_KEY` is set | `off` stops transcribing WhatsApp voice notes. |
+| `SARVAM_STT_MODEL`, `SARVAM_STT_URL`, `SARVAM_STT_LANGUAGE` | `saaras:v3`, `https://api.sarvam.ai/speech-to-text`, `unknown` (auto-detect) | Speech-to-text for voice notes. Set the language (e.g. `hi-IN`) only if all your customers speak one language. |
 | `EMBEDDING_PROVIDER` | `mock` | `mock` (development only) or `openai` (any OpenAI-compatible embeddings endpoint). |
 | `EMBEDDING_API_KEY` | `OPENAI_API_KEY` | Key for the embeddings endpoint. |
 | `EMBEDDING_BASE_URL` | `OPENAI_BASE_URL` | Embeddings endpoint base URL. |
@@ -74,6 +76,7 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `EMBEDDING_SEND_DIMENSIONS` | `false` | `true` for models that accept a `dimensions` parameter. |
 | `RETRIEVAL_TOP_K` | `6` | How many passages are given to the model per question. |
 | `RETRIEVAL_MIN_SCORE` | `0.2` (`0.1` in `.env.example`) | Passages scoring below this similarity are ignored. Tune per embedding model. |
+| `ANSWER_FIX_MIN_SCORE` | `0.5` | How similar a visitor's question must be to a Q&A answer's question for the owner's answer to be used. Raise it if Q&A answers show up for unrelated questions. |
 
 ### WhatsApp (guides: [whatsapp.md](whatsapp.md), [embedded-signup.md](embedded-signup.md))
 

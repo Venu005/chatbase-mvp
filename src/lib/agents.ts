@@ -13,6 +13,9 @@ export type Agent = {
   handoff_message: string;
   notify_email: boolean;
   allowed_domains: string[];
+  lead_mode: "off" | "after_first_answer" | "before_chat";
+  lead_fields: ("name" | "email" | "phone")[];
+  lead_message: string;
   created_at: string;
 };
 

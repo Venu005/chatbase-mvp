@@ -16,6 +16,7 @@ export const GET = handle<Ctx>(async (_req, { params }) => {
     `SELECT c.id, c.channel, c.created_at, c.updated_at, c.mode, c.needs_reply, c.handoff_reason,
             CASE WHEN c.channel = 'whatsapp' THEN '+' || substr(c.session_id, 4) ELSE c.visitor_contact END AS contact,
             (SELECT count(*)::int FROM messages m WHERE m.conversation_id = c.id) AS message_count,
+            (SELECT count(*)::int FROM messages m WHERE m.conversation_id = c.id AND m.feedback = -1) AS thumbs_down,
             (SELECT m.content FROM messages m WHERE m.conversation_id = c.id AND m.role = 'user' ORDER BY m.id DESC LIMIT 1) AS last_visitor_message,
             (SELECT m.content FROM messages m WHERE m.conversation_id = c.id AND m.role = 'user' ORDER BY m.id LIMIT 1) AS first_message
        FROM conversations c WHERE c.agent_id = $1

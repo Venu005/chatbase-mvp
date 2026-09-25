@@ -22,7 +22,10 @@ export const GET = handle<Ctx>(async (_req, { params }) => {
     [cid, agent.id]
   );
   if (!conversation) throw new HttpError(404, "Conversation not found");
-  const messages = await q("SELECT id, role, content, citations, created_at FROM messages WHERE conversation_id = $1 ORDER BY id", [cid]);
+  const messages = await q(`SELECT m.id, m.role, m.content, m.citations, m.feedback, m.created_at,
+            m.latency_ms IS NOT NULL AS bot,  -- a bot answer (not a handoff notice)
+            EXISTS (SELECT 1 FROM answer_fixes f WHERE f.message_id = m.id) AS fixed
+       FROM messages m WHERE m.conversation_id = $1 ORDER BY m.id`, [cid]);
   return NextResponse.json({ conversation, messages });
 });
 

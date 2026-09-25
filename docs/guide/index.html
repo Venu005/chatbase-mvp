@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chatbase India Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f5f7f7;
+  --surface: #ffffff;
+  --ink: #14191b;
+  --muted: #56636a;
+  --line: #dde4e5;
+  --accent: #0f766e;
+  --accent-soft: #e3f1ef;
+  --new: #9a3412;
+  --new-soft: #fdeee4;
+  --branch: #1d4ed8;
+  --branch-soft: #e7eefc;
+  --code-bg: #eef2f2;
+  --shadow: 0 1px 2px rgba(20, 25, 27, .06), 0 8px 24px rgba(20, 25, 27, .06);
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e1213;
+    --surface: #161c1e;
+    --ink: #e6ecec;
+    --muted: #9aa8ad;
+    --line: #29343a;
+    --accent: #3fb8a8;
+    --accent-soft: #15302c;
+    --new: #fdba8c;
+    --new-soft: #3a2216;
+    --branch: #9db8f5;
+    --branch-soft: #1a2542;
+    --code-bg: #1e2629;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1213;
+  --surface: #161c1e;
+  --ink: #e6ecec;
+  --muted: #9aa8ad;
+  --line: #29343a;
+  --accent: #3fb8a8;
+  --accent-soft: #15302c;
+  --new: #fdba8c;
+  --new-soft: #3a2216;
+  --branch: #9db8f5;
+  --branch-soft: #1a2542;
+  --code-bg: #1e2629;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); padding-inline: 16px; }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+code, kbd { font-family: var(--mono); font-size: .86em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(34px, 6vw, 54px); letter-spacing: -.02em; }
+h2 { font-size: clamp(26px, 3.6vw, 34px); letter-spacing: -.01em; }
+h3 { font-size: 21px; }
+p { margin: 0; }
+
+.shell { max-width: 1180px; margin: 0 auto; padding-block: 40px 80px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 56px; }
+@media (max-width: 900px) { .shell { grid-template-columns: minmax(0, 1fr); gap: 24px; padding-block: 24px 60px; } }
+
+/* table of contents */
+.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: 14px; display: flex; flex-direction: column; gap: 14px; }
+.toc .brand { font-family: var(--display); font-weight: 700; font-size: 17px; }
+.toc ol { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.toc a { display: block; color: var(--muted); text-decoration: none; padding: 4px 10px; border-left: 2px solid var(--line); }
+.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+.toc .sub a { padding-left: 22px; font-size: 13px; }
+@media (max-width: 900px) {
+  .toc { position: static; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .toc ol { flex-direction: row; flex-wrap: wrap; gap: 4px 8px; }
+  .toc .sub { display: none; }
+  .toc a { border-left: 0; padding: 2px 0; }
+  .toc a::after { content: " ·"; color: var(--line); }
+}
+
+main { min-width: 0; display: flex; flex-direction: column; gap: 64px; }
+section { display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 24px; }
+.eyebrow { font: 600 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.lede { font-size: 19px; color: var(--muted); max-width: 64ch; }
+.prose { max-width: 70ch; display: flex; flex-direction: column; gap: 12px; }
+.muted { color: var(--muted); }
+.small { font-size: 14px; }
+
+/* hero */
+.hero { display: flex; flex-direction: column; gap: 18px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.facts { display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: 14px; color: var(--muted); padding-bottom: 28px; }
+.facts strong { color: var(--ink); font-weight: 600; }
+
+/* labels */
+.tag { display: inline-block; font: 600 11px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 5px; vertical-align: 2px; white-space: nowrap; }
+.tag.new { background: var(--new-soft); color: var(--new); }
+.tag.branch { background: var(--branch-soft); color: var(--branch); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; color: var(--muted); }
+
+/* feature map */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+td.area { font-weight: 600; white-space: nowrap; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* journey */
+.journey { list-style: none; counter-reset: step; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.journey li { counter-increment: step; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.journey li::before { content: counter(step); font: 700 14px/1 var(--display); color: var(--accent); background: var(--accent-soft); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; }
+.journey strong { font-weight: 600; }
+.journey span { font-size: 14px; color: var(--muted); }
+
+/* feature blocks */
+.group-head { display: flex; flex-direction: column; gap: 8px; }
+.feature { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 24px; }
+.feature > h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.feature .where { font-size: 14px; color: var(--muted); }
+.feature .where b { color: var(--ink); font-weight: 600; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; }
+@media (max-width: 760px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.label { font: 600 12px/1 var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+ol.steps, ul.notes { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+ol.steps li::marker { font-weight: 600; color: var(--accent); }
+ul.notes { font-size: 15px; }
+ul.notes li::marker { color: var(--muted); }
+figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+figure img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); box-shadow: var(--shadow); background: #fff; }
+figure.phone { max-width: 320px; }
+figcaption { font-size: 13px; color: var(--muted); }
+.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; align-items: start; }
+
+/* callouts */
+.callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 10px 10px 0; font-size: 15px; max-width: 78ch; }
+.callout.warn { border-left-color: var(--new); background: var(--new-soft); }
+
+/* checklist */
+.checklist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; max-width: 80ch; }
+.checklist li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; }
+.checklist li::before { content: ""; width: 16px; height: 16px; margin-top: 4px; border: 2px solid var(--accent); border-radius: 4px; }
+pre { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg); border-radius: 10px; padding: 14px 16px; margin: 0; overflow-x: auto; line-height: 1.55; }
+
+footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 20px; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+</head>
+<body>
+<div class="shell">
+  <nav class="toc" aria-label="Contents">
+    <span class="brand">Chatbase India</span>
+    <ol>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#map">Feature map</a></li>
+      <li><a href="#journey">First day</a></li>
+      <li><a href="#teach">Teach the assistant</a></li>
+      <li class="sub"><a href="#sources">Sources</a></li>
+      <li class="sub"><a href="#qa">Q&amp;A and fixes</a></li>
+      <li class="sub"><a href="#playground">Playground</a></li>
+      <li><a href="#channels">Channels</a></li>
+      <li class="sub"><a href="#widget">Website chat</a></li>
+      <li class="sub"><a href="#domains">Allowed websites</a></li>
+      <li class="sub"><a href="#whatsapp">WhatsApp</a></li>
+      <li class="sub"><a href="#voice">Voice notes</a></li>
+      <li><a href="#conversations">Conversations</a></li>
+      <li class="sub"><a href="#inbox">Inbox and handoff</a></li>
+      <li class="sub"><a href="#feedback">Answer feedback</a></li>
+      <li><a href="#growth">Leads and analytics</a></li>
+      <li class="sub"><a href="#leads">Lead capture</a></li>
+      <li class="sub"><a href="#analytics">Analytics</a></li>
+      <li><a href="#account">Account and billing</a></li>
+      <li><a href="#ai">AI and languages</a></li>
+      <li><a href="#safety">Safety and limits</a></li>
+      <li><a href="#deploy">Go-live checklist</a></li>
+      <li><a href="#testing">Testing</a></li>
+      <li><a href="#next">Limits and next steps</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <!-- ================================================================ -->
+    <header class="hero" id="overview">
+      <span class="eyebrow">Product guide · 25 September 2026</span>
+      <h1>Chatbase India</h1>
+      <p class="lede">An AI support assistant for Indian small businesses. You train it on your website, PDFs and FAQs. It answers customers on your website and on WhatsApp, in Hindi, Hinglish, English and other Indian languages. When it can't answer, a person from your team takes over.</p>
+      <div class="facts">
+        <span><strong>2</strong> channels: website chat, WhatsApp</span>
+        <span><strong>4</strong> AI providers: OpenAI-compatible, Anthropic, Sarvam, offline mock</span>
+        <span><strong>4</strong> plans billed in INR through Razorpay</span>
+        <span><strong>125</strong> automated checks (21 unit, 104 end-to-end)</span>
+      </div>
+    </header>
+
+    <!-- ================================================================ -->
+    <section id="map">
+      <div class="group-head">
+        <span class="eyebrow">At a glance</span>
+        <h2>Feature map</h2>
+      </div>
+      <p class="prose muted">Everything the product does today, and where to find it. Each agent (one assistant) has its own tabs in the dashboard: Sources, Q&amp;A, Playground, Settings, Embed, WhatsApp, Chats, Leads and Analytics.</p>
+      <div class="legend">
+        <span><span class="tag new">New</span> added in pull request #1</span>
+        <span><span class="tag branch">New · PR #2</span> added in pull request #2 (both are merged into <code>main</code>)</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Area</th><th>Feature</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td class="area">Teach</td><td>Knowledge sources: website crawl, PDF/TXT/MD/CSV, pasted text · retry for failed websites <span class="tag new">New</span></td><td>Sources tab</td></tr>
+            <tr><td class="area"></td><td>Q&amp;A answers and "Fix this answer" <span class="tag branch">New · PR #2</span></td><td>Q&amp;A tab, Chats, Analytics</td></tr>
+            <tr><td class="area"></td><td>Playground (owner-only test chat) <span class="tag new">New</span></td><td>Playground tab</td></tr>
+            <tr><td class="area">Channels</td><td>Website chat bubble and full-page chat link</td><td>Embed tab</td></tr>
+            <tr><td class="area"></td><td>Allowed websites for the chat <span class="tag new">New</span></td><td>Embed tab</td></tr>
+            <tr><td class="area"></td><td>WhatsApp: paste credentials, or Connect with Facebook</td><td>WhatsApp tab</td></tr>
+            <tr><td class="area"></td><td>WhatsApp voice notes, transcribed <span class="tag branch">New · PR #2</span></td><td>Automatic with a Sarvam key</td></tr>
+            <tr><td class="area">Conversations</td><td>Inbox, human handoff, e-mail alerts</td><td>Chats tab</td></tr>
+            <tr><td class="area"></td><td>👍 / 👎 on answers <span class="tag branch">New · PR #2</span></td><td>Website chat, Chats, Analytics</td></tr>
+            <tr><td class="area"></td><td>Formatted answers (bold, lists, links) <span class="tag new">New</span></td><td>Website chat, Chats</td></tr>
+            <tr><td class="area">Growth</td><td>Lead capture and CSV export <span class="tag branch">New · PR #2</span></td><td>Settings, Leads tab</td></tr>
+            <tr><td class="area"></td><td>Analytics and knowledge gaps <span class="tag branch">New · PR #2</span></td><td>Analytics tab</td></tr>
+            <tr><td class="area">Account</td><td>Sign up, log in, password reset by e-mail <span class="tag new">New</span></td><td>Login page</td></tr>
+            <tr><td class="area"></td><td>Plans, message credits, Razorpay subscriptions</td><td>Plans &amp; billing</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="journey">
+      <div class="group-head">
+        <span class="eyebrow">Getting started</span>
+        <h2>A business owner's first day</h2>
+      </div>
+      <ol class="journey">
+        <li><strong>Sign up</strong><span>E-mail and password. The Free plan gives 1 agent and 50 answers a month.</span></li>
+        <li><strong>Create an agent</strong><span>Give it a name. In Settings, add instructions, a welcome message and your brand colour.</span></li>
+        <li><strong>Add knowledge</strong><span>Sources tab: your website, a price list PDF, or a pasted FAQ.</span></li>
+        <li><strong>Test it</strong><span>Playground tab: ask what customers ask. Correct weak answers in the Q&amp;A tab.</span></li>
+        <li><strong>Go live</strong><span>Embed tab: paste one script tag into your site. Connect WhatsApp if you use it.</span></li>
+        <li><strong>Improve weekly</strong><span>Answer customers who asked for a person in Chats, download leads, and use Analytics to fill knowledge gaps.</span></li>
+      </ol>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="teach">
+      <div class="group-head">
+        <span class="eyebrow">Part 1</span>
+        <h2>Teach the assistant</h2>
+      </div>
+
+      <article class="feature" id="sources">
+        <h3>Knowledge sources <span class="tag new">Retry is new</span></h3>
+        <p class="where">Where: <b>Agent → Sources</b></p>
+        <p class="prose">The assistant answers only from what you give it. Each source is split into passages and indexed so the right ones are found for each question. Answers cite the passage they came from, like <code>[1]</code>, with a link to the page.</p>
+        <div class="cols">
+          <div>
+            <p class="label">How to use</p>
+            <ol class="steps">
+              <li>Choose <b>Website</b>, <b>File</b> or <b>Text / FAQ</b>.</li>
+              <li>Website: paste a URL and choose how many pages to read (this page, or up to 5, 10 or 20 pages on the same site).</li>
+              <li>File: upload a PDF, TXT, MD or CSV up to 10 MB.</li>
+              <li>Text: give it a title (for example "Refund policy") and paste the content.</li>
+              <li>Wait for the status to change from <i>processing</i> to <i>ready</i>. The count of passages shows how much was read.</li>
+            </ol>
+          </div>
+          <div>
+            <p class="label">Good to know</p>
+            <ul class="notes">
+              <li>Up to 50 sources per agent. Removing a source makes the assistant forget it at once.</li>
+              <li>If a source is still <i>processing</i> after 20 minutes (for example because the server restarted), it is marked failed.</li>
+              <li>Failed website sources have a <b>Retry</b> button that reads the site again with the same page count. Files and pasted text have to be added again.</li>
+              <li>Menus, footers and scripts are stripped from web pages. Hindi text is split at the danda (।), so sentences stay whole.</li>
+              <li>Private or internal addresses (for example <code>localhost</code> or cloud metadata IPs) are refused.</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="qa">
+        <h3>Q&amp;A answers and "Fix this answer" <span class="tag branch">New · PR #2</span></h3>
+        <p class="where">Where: <b>Agent → Q&amp;A</b>, plus a <b>Fix this answer</b> link under every bot answer in <b>Chats</b> and in <b>Analytics</b></p>
+        <p class="prose">Answers you write take priority over everything in the sources. When a customer asks the same question, or one that means the same, the assistant gives your answer, in the customer's language. This is the fastest way to correct the assistant.</p>
+        <div class="cols">
+          <div>
+            <p class="label">How to use</p>
+            <ol class="steps">
+              <li>In <b>Chats</b>, open a conversation and press <b>Fix this answer</b> under the reply you want to change.</li>
+              <li>The form is filled in with the customer's question and the bot's answer. Rewrite the answer and press <b>Save answer</b>.</li>
+              <li>The reply is marked <b>✓ Fixed</b>, and the next customer who asks gets your answer.</li>
+              <li>To add answers ahead of time, or to edit and delete them, use the <b>Q&amp;A</b> tab.</li>
+            </ol>
+          </div>
+          <div>
+            <p class="label">Good to know</p>
+            <ul class="notes">
+              <li>Up to 500 Q&amp;A answers per agent. Edits take effect at once.</li>
+              <li>Questions are matched by meaning, not exact words. The strictness is the <code>ANSWER_FIX_MIN_SCORE</code> setting (default 0.5).</li>
+              <li>An answer from Q&amp;A has no source link, so no unrelated citations are shown with it.</li>
+              <li>The playground uses your Q&amp;A answers too, so you can check a fix right away.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="shots">
+          <figure><img src="img/inbox-fix.png" alt="Chats tab with the Fix this answer form open under a bot reply" width="920" height="961" loading="lazy"><figcaption>Fixing an answer from the inbox. The customer's question is filled in automatically.</figcaption></figure>
+          <figure class="phone"><img src="img/widget-fixed.png" alt="Website chat showing the owner's corrected answer about Sunday delivery" width="390" height="600" loading="lazy"><figcaption>The next customer gets the corrected answer.</figcaption></figure>
+        </div>
+        <figure><img src="img/qa.png" alt="Q&amp;A tab listing a saved question and answer with Edit and Delete" width="920" height="796" loading="lazy"><figcaption>The Q&amp;A tab: add answers ahead of time, or edit the ones you fixed.</figcaption></figure>
+      </article>
+
+      <article class="feature" id="playground">
+        <h3>Playground and settings <span class="tag new">Owner-only</span></h3>
+        <p class="where">Where: <b>Agent → Playground</b> and <b>Agent → Settings</b></p>
+        <div class="cols">
+          <div>
+            <p class="label">Settings</p>
+            <ul class="notes">
+              <li><b>Instructions</b>: tone, business details, what to do when the answer isn't known (for example "share our WhatsApp number").</li>
+              <li><b>Welcome message</b> and <b>brand colour</b> for the chat window.</li>
+              <li><b>Talking to a person</b>: turn handoff on or off, the message customers see, and e-mail alerts.</li>
+              <li><b>Collect leads</b>: see <a href="#leads">Lead capture</a>.</li>
+            </ul>
+          </div>
+          <div>
+            <p class="label">Playground</p>
+            <ul class="notes">
+              <li>A private test chat. It never hands off to a person, and it doesn't count in Analytics.</li>
+              <li>Only the agent's owner, signed in to the dashboard, can use it.</li>
+              <li>Each answer uses one message credit, like a real chat. Use <b>Start a new chat</b> to test follow-up questions from scratch.</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="channels">
+      <div class="group-head">
+        <span class="eyebrow">Part 2</span>
+        <h2>Put it where customers are</h2>
+      </div>
+
+      <article class="feature" id="widget">
+        <h3>Website chat</h3>
+        <p class="where">Where: <b>Agent → Embed</b></p>
+        <div class="cols">
+          <div>
+            <p class="label">How to use</p>
+            <ol class="steps">
+              <li>Press <b>Copy snippet</b>. It looks like <code>&lt;script src="…/widget.js" data-agent-id="…" defer&gt;&lt;/script&gt;</code>.</li>
+              <li>Paste it before <code>&lt;/body&gt;</code> on your site. It works with Shopify, WordPress, Wix and hand-built sites.</li>
+              <li>A chat bubble appears in the corner. Optional attributes: <code>data-position="left"</code> and <code>data-color="#0f766e"</code>.</li>
+              <li>You can also share the <b>full-page chat link</b> (<code>/embed/&lt;agent id&gt;</code>) on social media, in QR codes or in e-mails.</li>
+            </ol>
+          </div>
+          <div>
+            <p class="label">What visitors get</p>
+            <ul class="notes">
+              <li>Answers appear word by word as they're written, with bold, lists and links, and numbered source links.</li>
+              <li>The conversation is kept when they reload the page.</li>
+              <li><b>Talk to a human</b> under the chat, 👍/👎 under each answer, and optionally a <a href="#leads">details form</a>.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="shots">
+          <figure class="phone"><img src="img/widget.png" alt="Website chat with a bold, formatted answer, a source link and thumbs buttons" width="390" height="600" loading="lazy"><figcaption>The website chat, in the business's brand colour.</figcaption></figure>
+          <figure><img src="img/embed.png" alt="Embed tab with the script snippet and the allowed websites box" width="920" height="841" loading="lazy"><figcaption>The Embed tab: snippet, full-page link and allowed websites.</figcaption></figure>
+        </div>
+      </article>
+
+      <article class="feature" id="domains">
+        <h3>Allowed websites <span class="tag new">New</span></h3>
+        <p class="where">Where: <b>Agent → Embed → Allowed websites</b></p>
+        <p class="prose">An agent's ID is public, so anyone could copy your snippet onto their own site and spend your message credits. Listing your websites stops that.</p>
+        <div class="cols">
+          <div>
+            <p class="label">How to use</p>
+            <ol class="steps">
+              <li>Enter your sites, one per line, for example <code>sharmakirana.in</code>. Subdomains such as <code>www.</code> or <code>shop.</code> are included.</li>
+              <li>Press <b>Save websites</b>. Leave the box empty to allow any website (the default).</li>
+            </ol>
+          </div>
+          <div>
+            <p class="label">Good to know</p>
+            <ul class="notes">
+              <li>On other sites, the bubble doesn't appear. If the chat is forced into a frame there, it says "This chat isn't enabled for this website".</li>
+              <li>The full-page chat link still works everywhere.</li>
+              <li>Up to 20 websites. This stops other websites from showing your chat. It does not stop someone who writes their own script to call the chat API directly; the per-IP rate limit still applies to them.</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="whatsapp">
+        <h3>WhatsApp</h3>
+        <p class="where">Where: <b>Agent → WhatsApp</b></p>
+        <div class="cols">
+          <div>
+            <p class="label">How to connect</p>
+            <ol class="steps">
+              <li><b>Connect with Facebook</b> (if the platform has a Meta app set up): log in, pick or create a WhatsApp Business account and number, and you're done.</li>
+              <li><b>Or connect manually</b>: paste the Phone number ID, access token and app secret from Meta's developer console. Then copy the webhook URL and verify token shown in the tab into Meta's WhatsApp configuration.</li>
+              <li>Send a message to the number to test it.</li>
+            </ol>
+          </div>
+          <div>
+            <p class="label">Good to know</p>
+            <ul class="notes">
+              <li>Answers are formatted for WhatsApp: <code>*bold*</code>, no citation markers, and up to two source links.</li>
+              <li>Customers can type <code>human</code>, <code>agent</code> or "insaan se baat karni hai" to reach a person.</li>
+              <li>Your replies from the inbox go to the customer's WhatsApp, within WhatsApp's 24-hour reply window.</li>
+              <li>Every WhatsApp customer is added to <a href="#leads">Leads</a> with their number and WhatsApp profile name.</li>
+              <li>Access tokens are stored encrypted. Each sender can send up to 10 messages a minute.</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="voice">
+        <h3>WhatsApp voice notes <span class="tag branch">New · PR #2</span></h3>
+        <p class="where">Where: automatic once the server has a <code>SARVAM_API_KEY</code></p>
+        <p class="prose">Many customers send voice notes instead of typing. The voice note is downloaded from WhatsApp and transcribed with Sarvam's speech-to-text, which detects Hindi, English and other Indian languages. The words are then answered as if the customer had typed them.</p>
+        <ul class="notes">
+          <li>In the inbox, the customer's message shows the transcript marked 🎤, so you can read what they said.</li>
+          <li>If a person is handling the chat, the transcript goes to them and the assistant stays quiet.</li>
+          <li>Voice notes longer than about 30 seconds, or ones that can't be understood, get a polite "please type your question" reply.</li>
+          <li>It works whichever AI writes the answers. Set <code>VOICE_NOTES=off</code> to turn it off.</li>
+        </ul>
+      </article>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="conversations">
+      <div class="group-head">
+        <span class="eyebrow">Part 3</span>
+        <h2>Conversations</h2>
+      </div>
+
+      <article class="feature" id="inbox">
+        <h3>Inbox and human handoff</h3>
+        <p class="where">Where: <b>Agent → Chats</b></p>
+        <div class="cols">
+          <div>
+            <p class="label">How it works</p>
+            <ol class="steps">
+              <li>A customer presses <b>Talk to a human</b>, or types something like "connect me to an agent", "call me", "मुझे किसी इंसान से बात करनी है" or "manager se baat karao".</li>
+              <li>They see your handoff message, and on the website they can leave a phone number or e-mail.</li>
+              <li>You get an e-mail and a red <b>waiting</b> badge. Open the chat, type a reply, and press <b>Send reply</b>.</li>
+              <li>Press <b>Hand back to assistant</b> when you're done. <b>Take over</b> pauses the assistant in any chat.</li>
+            </ol>
+          </div>
+          <div>
+            <p class="label">Good to know</p>
+            <ul class="notes">
+              <li>Handoff is free. While a person is handling a chat, the assistant stays quiet and uses no credits.</li>
+              <li>You get at most one e-mail per conversation every 15 minutes. If nobody replies for 24 hours, the chat goes back to the assistant. Both times can be changed in the server settings.</li>
+              <li>The inbox shows the 100 most recent conversations, with customers waiting for a reply first. It updates on its own.</li>
+              <li>Each conversation shows how many answers the customer rated 👎. Bot answers can be fixed from the transcript.</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="feedback">
+        <h3>👍 / 👎 on answers <span class="tag branch">New · PR #2</span></h3>
+        <p class="where">Where: under every answer in the website chat. Results appear in <b>Chats</b> and <b>Analytics</b>.</p>
+        <ul class="notes">
+          <li>Visitors click 👍 or 👎. Clicking the same button again removes the rating, and the rating is kept when they reload the page.</li>
+          <li>Visitors can rate only answers in their own conversation, and only the assistant's answers (not the handoff message).</li>
+          <li>In Analytics, answers marked 👎 are grouped by question, each with a <b>Fix this answer</b> button.</li>
+        </ul>
+      </article>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="growth">
+      <div class="group-head">
+        <span class="eyebrow">Part 4</span>
+        <h2>Leads and analytics</h2>
+      </div>
+
+      <article class="feature" id="leads">
+        <h3>Lead capture <span class="tag branch">New · PR #2</span></h3>
+        <p class="where">Where: turn it on in <b>Settings → Collect leads</b>. See the results in the <b>Leads</b> tab.</p>
+        <div class="cols">
+          <div>
+            <p class="label">How to use</p>
+            <ol class="steps">
+              <li>Choose when to ask: <b>After the first answer</b> (visitors can skip, and the skip is remembered) or <b>Before the chat starts</b> (required).</li>
+              <li>Tick the details to ask for (name, e-mail, phone) and write the message shown above the form.</li>
+              <li>Open <b>Leads</b> to see everyone who left details. Click their first question to open the chat.</li>
+              <li>Press <b>Download CSV</b> to open the list in Excel or Google Sheets.</li>
+            </ol>
+          </div>
+          <div>
+            <p class="label">Where leads come from</p>
+            <ul class="notes">
+              <li><b>Lead form</b> in the website chat. Phone numbers and e-mails are checked before saving. You get an e-mail for each new lead if e-mail alerts are on.</li>
+              <li><b>WhatsApp</b>: every customer, with their number and profile name.</li>
+              <li><b>Asked for a person</b>: the phone or e-mail a visitor leaves during a handoff.</li>
+              <li>You can delete a lead (for example if a customer asks to be forgotten). The conversation stays.</li>
+              <li>The CSV opens correctly in Excel with Hindi names, and it's protected against spreadsheet formula tricks.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="shots">
+          <figure class="phone"><img src="img/lead-form.png" alt="Website chat asking for name and phone number before the chat starts" width="390" height="600" loading="lazy"><figcaption>"Before the chat starts" mode.</figcaption></figure>
+          <figure><img src="img/leads.png" alt="Leads tab listing leads from the form, WhatsApp and a handoff, with a Download CSV button" width="920" height="494" loading="lazy"><figcaption>The Leads tab, with leads from all three sources.</figcaption></figure>
+        </div>
+      </article>
+
+      <article class="feature" id="analytics">
+        <h3>Analytics <span class="tag branch">New · PR #2</span></h3>
+        <p class="where">Where: <b>Agent → Analytics</b></p>
+        <p class="prose">Shows how the assistant is doing and what to teach it next. Pick the last 7, 30 or 90 days. Days are counted in Indian time, and your own playground tests are left out.</p>
+        <div class="cols">
+          <div>
+            <p class="label">What it shows</p>
+            <ul class="notes">
+              <li><b>Conversations</b>, split by website and WhatsApp.</li>
+              <li><b>Answers by the assistant</b> and the average time to answer.</li>
+              <li><b>Helpful</b>: the share of rated answers marked 👍.</li>
+              <li><b>Not found in your sources</b>: how often the assistant had nothing to go on.</li>
+              <li><b>Asked for a person</b>, and how many replies your team sent.</li>
+              <li>A chart of <b>conversations per day</b>. Hover over a day for the exact count, or open it as a table.</li>
+            </ul>
+          </div>
+          <div>
+            <p class="label">How to act on it</p>
+            <ol class="steps">
+              <li><b>Knowledge gaps</b> lists questions nothing in your sources answered, most asked first.</li>
+              <li>Press <b>Add answer</b> next to one, write the answer, and it's used from then on. Answered questions stop counting as gaps.</li>
+              <li><b>Answers marked 👎</b> lists what customers didn't like, grouped by question, with <b>Fix this answer</b>.</li>
+            </ol>
+          </div>
+        </div>
+        <figure><img src="img/analytics.png" alt="Analytics tab with five stat tiles, a conversations per day column chart, knowledge gaps and disliked answers" width="920" height="1420" loading="lazy"><figcaption>Analytics for a shop with 30 days of example history.</figcaption></figure>
+      </article>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="account">
+      <div class="group-head">
+        <span class="eyebrow">Part 5</span>
+        <h2>Account, plans and billing</h2>
+      </div>
+      <div class="cols">
+        <div class="prose">
+          <p><b>Sign up and log in</b> with e-mail and password. Each account sees only its own agents and data.</p>
+          <p><b>Forgot password?</b> <span class="tag new">New</span> On the login page, enter your e-mail and you get a link that works once, for 60 minutes. Setting a new password signs out every other device. The form says the same thing whether or not the e-mail has an account, and sends at most 3 links an hour.</p>
+          <p><b>Upgrading</b> happens on <b>Plans &amp; billing</b> through Razorpay Checkout (cards, UPI Autopay). The plan changes only when Razorpay confirms payment. Cancelling keeps the paid plan until the end of the billing period. To switch plans, cancel first.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Plan</th><th class="num">Price / month</th><th class="num">Answers / month</th><th class="num">Agents</th></tr></thead>
+            <tbody>
+              <tr><td>Free</td><td class="num">₹0</td><td class="num">50</td><td class="num">1</td></tr>
+              <tr><td>Starter</td><td class="num">₹999</td><td class="num">1,000</td><td class="num">3</td></tr>
+              <tr><td>Growth</td><td class="num">₹2,999</td><td class="num">5,000</td><td class="num">10</td></tr>
+              <tr><td>Pro</td><td class="num">₹7,999</td><td class="num">20,000</td><td class="num">30</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="callout">One message credit is one AI answer, on the website, in the playground or on WhatsApp. Handoffs, owner replies and voice transcription use no credits. The prices are placeholders; set your own in <code>src/lib/plans.ts</code>. GST invoices are not generated yet.</p>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="ai">
+      <div class="group-head">
+        <span class="eyebrow">Part 6</span>
+        <h2>AI and languages</h2>
+      </div>
+      <div class="cols">
+        <ul class="notes">
+          <li><b>Answers stay grounded</b>: the assistant uses only your sources and Q&amp;A answers. When it doesn't know, it says so and suggests contacting the business, or talking to a person.</li>
+          <li><b>Customers' own language</b>: it replies in the language and script the customer writes in, including Hinglish in English letters.</li>
+          <li><b>Follow-up questions</b> such as "and the price?" work, because the previous question is used in the search too.</li>
+          <li><b>Formatted answers</b> <span class="tag new">New</span>: bold, lists, code and links in the website chat and in the inbox.</li>
+        </ul>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Setting</th><th>Options</th></tr></thead>
+            <tbody>
+              <tr><td><code>LLM_PROVIDER</code></td><td><code>openai</code> (or any compatible API: Ollama, vLLM, gateways), <code>anthropic</code>, <code>sarvam</code>, <code>mock</code></td></tr>
+              <tr><td><code>EMBEDDING_PROVIDER</code></td><td><code>openai</code>-compatible, or <code>mock</code> for development</td></tr>
+              <tr><td><code>SARVAM_API_KEY</code></td><td>Sarvam answers, and voice notes</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="safety">
+      <div class="group-head">
+        <span class="eyebrow">Part 7</span>
+        <h2>Safety and limits</h2>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Protection</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Rate limits</td><td>Chat: 20 messages a minute per visitor IP per agent. Login: 10 tries per 5 minutes. Sign-up: 10 an hour per IP. Password reset: 5 requests per 15 minutes. WhatsApp: 10 messages a minute per sender.</td></tr>
+            <tr><td>Allowed websites</td><td>Other websites can't show your chat <span class="tag new">New</span></td></tr>
+            <tr><td>Owner-only playground</td><td>Nobody else can use the test channel, which skips handoff <span class="tag new">New</span></td></tr>
+            <tr><td>Session reset</td><td>A password reset signs out every other session, including a stolen login cookie <span class="tag new">New</span></td></tr>
+            <tr><td>Encrypted secrets</td><td>WhatsApp tokens are stored with AES-256-GCM encryption</td></tr>
+            <tr><td>Signed webhooks</td><td>Messages from Meta and Razorpay are accepted only with a valid signature, and repeats are ignored</td></tr>
+            <tr><td>Safe crawling</td><td>Private and internal addresses are refused, and pages are limited to 3 MB</td></tr>
+            <tr><td>Data isolation</td><td>Every dashboard request checks that the agent belongs to the signed-in account</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="deploy">
+      <div class="group-head">
+        <span class="eyebrow">For whoever runs the server</span>
+        <h2>Go-live checklist</h2>
+      </div>
+      <ul class="checklist">
+        <li><span>Run a long-lived Node server (<code>pnpm build &amp;&amp; pnpm start</code>, Docker or a VM) with Node 22.9+, pnpm 10+ and Postgres 15+ with pgvector. Ingestion runs in the background, so serverless hosting needs a job queue first.</span></li>
+        <li><span>Run <code>pnpm migrate</code>. There are now 11 migrations; 006 to 011 were added in this round, and they're safe on existing data.</span></li>
+        <li><span>Set <code>AUTH_SECRET</code> and a separate <code>ENCRYPTION_KEY</code> (32+ random characters each), and back up the encryption key.</span></li>
+        <li><span>Set <code>APP_URL</code> to the public <code>https://</code> address. That turns on secure cookies and is needed for WhatsApp and Razorpay webhooks.</span></li>
+        <li><span>Choose real AI providers: <code>LLM_PROVIDER</code>, <code>LLM_MODEL</code>, keys and <code>EMBEDDING_PROVIDER=openai</code>. Then run <code>pnpm preflight --live</code>.</span></li>
+        <li><span>Set <code>SMTP_URL</code> and <code>EMAIL_FROM</code>. Without them there are no password reset, handoff or new-lead e-mails.</span></li>
+        <li><span>Set <code>SARVAM_API_KEY</code> for voice notes (optional).</span></li>
+        <li><span>Billing: the Razorpay keys, webhook secret, and <code>pnpm razorpay:setup</code> for the plan IDs. WhatsApp: the Meta app values for Connect with Facebook.</span></li>
+        <li><span>Tune <code>RETRIEVAL_MIN_SCORE</code> (start near 0.25 with real embeddings) and <code>ANSWER_FIX_MIN_SCORE</code> (0.5) on your own customers' questions.</span></li>
+      </ul>
+      <p class="muted small">The full list of settings is in <code>docs/setup.md</code>. Deployment, backups and https are covered in <code>docs/deployment.md</code>.</p>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="testing">
+      <div class="group-head">
+        <span class="eyebrow">Quality</span>
+        <h2>Testing</h2>
+      </div>
+      <p class="prose">Every suite below passed on 25 September 2026, run against a local Postgres with pgvector, the offline mock models, and fake Meta, Razorpay, SMTP and Sarvam servers. The screenshots in this guide come from the same setup, which is why answers start with "(mock model)".</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Command</th><th>Covers</th><th class="num">Checks</th></tr></thead>
+          <tbody>
+            <tr><td><code>pnpm test</code></td><td>Chunking, WhatsApp formatting, encryption, handoff phrases, Markdown, allowed websites, phone/e-mail/CSV</td><td class="num">21</td></tr>
+            <tr><td><code>pnpm smoke</code></td><td>Accounts, ingestion, answers, isolation, widget, rate limits</td><td class="num">17</td></tr>
+            <tr><td><code>pnpm smoke:features</code></td><td>Feedback, Q&amp;A answers, analytics, leads, CSV</td><td class="num">12</td></tr>
+            <tr><td><code>pnpm smoke:account</code></td><td>Password reset, allowed websites</td><td class="num">9</td></tr>
+            <tr><td><code>pnpm smoke:whatsapp</code></td><td>Connection, signatures, replies, voice notes, leads</td><td class="num">15</td></tr>
+            <tr><td><code>pnpm smoke:handoff</code></td><td>Handoff, inbox replies, e-mail alerts, auto-resume</td><td class="num">19</td></tr>
+            <tr><td><code>pnpm smoke:embedded</code></td><td>Connect with Facebook flow</td><td class="num">13</td></tr>
+            <tr><td><code>pnpm smoke:billing</code></td><td>Razorpay checkout, webhooks, cancel</td><td class="num">15</td></tr>
+            <tr><td><code>pnpm smoke:sarvam</code></td><td>Sarvam chat provider</td><td class="num">4</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="next">
+      <div class="group-head">
+        <span class="eyebrow">Honest status</span>
+        <h2>Known limits and next steps</h2>
+      </div>
+      <div class="cols">
+        <div>
+          <p class="label">Known limits</p>
+          <ul class="notes">
+                        <li>Rate limits and background ingestion live in one server's memory. More than one server needs Redis and a job queue.</li>
+            <li>The visitor IP is taken from <code>X-Forwarded-For</code>, which is only safe behind your own proxy.</li>
+            <li>Connect with Facebook and voice notes were tested against fake Meta and Sarvam servers, not live accounts. Test with your own number first.</li>
+            <li>Sarvam's instant speech-to-text takes clips under about 30 seconds. Longer voice notes get a "please type" reply.</li>
+            <li>The assistant doesn't read WhatsApp images. The inbox lists 100 conversations, with no search.</li>
+          </ul>
+        </div>
+        <div>
+          <p class="label">Suggested next features</p>
+          <ul class="notes">
+            <li><b>Team members</b> who can reply from the inbox without the owner's login.</li>
+            <li><b>Automatic website re-sync</b> (weekly), so answers follow price changes.</li>
+            <li><b>Hybrid search</b> (meaning plus keywords) for product names and SKUs.</li>
+            <li><b>Actions</b>: order status from Shopify or WooCommerce, appointment booking, UPI payment links.</li>
+            <li><b>WhatsApp templates</b>, for replies after 24 hours and opt-in offers.</li>
+            <li><b>Credit top-ups</b>, GST invoices, and data export and deletion for India's DPDP Act.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Chatbase India · repository <code>venu005/chatbase-mvp</code> · guide written 25 September 2026 from the code on <code>main</code>. The source of this page is <code>docs/guide/index.html</code>.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

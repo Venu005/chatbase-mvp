@@ -10,6 +10,7 @@ import { createThinkFilter } from "../src/lib/providers/think.ts";
 import { normalizeTurns } from "../src/lib/providers/turns.ts";
 import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
+import { csvCell, normalizeEmail, normalizePhone, parseContact, toCsv } from "../src/lib/leads.ts";
 
 process.env.AUTH_SECRET ??= "unit-test-secret-unit-test-secret-1234";
 
@@ -199,4 +200,25 @@ test("embedAllowed: framed pages must come from an allowed site", () => {
   assert.ok(embedAllowed({ ...base, dest: "iframe", referer: "https://app.test/dashboard" }), "own app");
   assert.ok(!embedAllowed({ ...base, dest: null, referer: "https://evil.io/" }), "old browser with referer");
   assert.ok(embedAllowed({ ...base, dest: null, referer: null }), "old browser, nothing to judge by");
+});
+
+test("normalizePhone / normalizeEmail / parseContact", () => {
+  assert.equal(normalizePhone("+91 98765-43210"), "+919876543210");
+  assert.equal(normalizePhone("(080) 4567 8900"), "08045678900");
+  for (const bad of ["12345", "call me", "+91 98765 43210 ext 5", "1".repeat(16)]) assert.equal(normalizePhone(bad), null, bad);
+  assert.equal(normalizeEmail(" Ravi@Example.IN "), "ravi@example.in");
+  assert.equal(normalizeEmail("ravi@localhost"), null);
+  assert.deepEqual(parseContact("ravi@example.in"), { email: "ravi@example.in" });
+  assert.deepEqual(parseContact("98765 43210"), { phone: "9876543210" });
+  assert.equal(parseContact("tomorrow evening"), null);
+});
+
+test("toCsv: quoting, Unicode, and spreadsheet-formula (CSV injection) defusing", () => {
+  assert.equal(toCsv(["a", "b"], [["x,y", 'say "hi"']]), 'a,b\r\n"x,y","say ""hi"""\r\n');
+  assert.equal(csvCell("=HYPERLINK(1)"), "'=HYPERLINK(1)");
+  assert.equal(csvCell("@SUM(A1)"), "'@SUM(A1)");
+  assert.equal(csvCell("-cmd"), "'-cmd");
+  assert.equal(csvCell("+919876543210"), "+919876543210");
+  assert.equal(csvCell("रवि"), "रवि");
+  assert.equal(csvCell(null), "");
 });
