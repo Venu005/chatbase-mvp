@@ -3,7 +3,7 @@ import { z } from "zod";
 import { q, q1 } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { HttpError, handle } from "@/lib/http";
-import { ingestInBackground, ownAgent } from "@/lib/agents";
+import { failStaleSources, ingestInBackground, ownAgent } from "@/lib/agents";
 import { MAX_CRAWL_PAGES, assertPublicUrl, fetchDocs, pdfToText } from "@/lib/ingest";
 import { normalizeText } from "@/lib/chunk";
 
@@ -19,6 +19,7 @@ const MAX_TEXT_CHARS = 500_000;
 export const GET = handle<Ctx>(async (_req, { params }) => {
   const user = await requireUser();
   const agent = await ownAgent(user.id, (await params).id);
+  await failStaleSources(agent.id);
   const sources = await q(
     `SELECT id, type, title, url, status, error, char_count, chunk_count, created_at
        FROM sources WHERE agent_id = $1 ORDER BY created_at DESC`,
@@ -38,12 +39,12 @@ const textBody = z.object({
   text: z.string().min(20, "Add a little more text").max(MAX_TEXT_CHARS),
 });
 
-async function newSource(agentId: string, type: "url" | "file" | "text", title: string, url: string | null) {
+async function newSource(agentId: string, type: "url" | "file" | "text", title: string, url: string | null, crawlPages = 1) {
   const count = (await q1<{ n: number }>("SELECT count(*)::int AS n FROM sources WHERE agent_id = $1", [agentId]))!.n;
   if (count >= MAX_SOURCES) throw new HttpError(400, `An agent can have up to ${MAX_SOURCES} sources`);
   return (await q1<{ id: string }>(
-    "INSERT INTO sources (agent_id, type, title, url) VALUES ($1,$2,$3,$4) RETURNING id",
-    [agentId, type, title, url]
+    "INSERT INTO sources (agent_id, type, title, url, crawl_pages) VALUES ($1,$2,$3,$4,$5) RETURNING id",
+    [agentId, type, title, url, crawlPages]
   ))!;
 }
 
@@ -80,7 +81,7 @@ export const POST = handle<Ctx>(async (req, { params }) => {
     } catch (e) {
       throw new HttpError(400, (e as Error).message);
     }
-    const src = await newSource(agent.id, "url", url.hostname + (url.pathname === "/" ? "" : url.pathname), url.href);
+    const src = await newSource(agent.id, "url", url.hostname + (url.pathname === "/" ? "" : url.pathname), url.href, b.crawlPages);
     ingestInBackground(src.id, agent.id, () => fetchDocs(url.href, b.crawlPages));
     return NextResponse.json({ source: { id: src.id, status: "processing" } }, { status: 202 });
   }

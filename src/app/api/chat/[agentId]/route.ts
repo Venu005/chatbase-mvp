@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { HttpError, clientIp, handle, rateLimit } from "@/lib/http";
+import { getUser } from "@/lib/auth";
 import { getLLM } from "@/lib/providers";
 import { loadAgent, prepareAnswer, saveAnswer, usedCitations } from "@/lib/answer";
 import { refundCredit } from "@/lib/usage";
@@ -18,7 +19,7 @@ const schema = z.object({
 });
 
 /**
- * Public endpoint (called by the embeddable widget and the dashboard playground).
+ * Public endpoint for the embeddable widget; the dashboard playground (channel "playground") needs the owner's session.
  * Streams newline-delimited JSON:
  *   {"type":"delta","text":"..."}  ...  {"type":"done","citations":[...]}   or   {"type":"error","message":"..."}
  * When a person (not the bot) is handling the conversation the stream is just
@@ -35,6 +36,8 @@ export const POST = handle<Ctx>(async (req, { params }) => {
 
   const agent = await loadAgent(agentId);
   if (!agent) throw new HttpError(404, "Agent not found");
+  // The playground skips human handoff, so only the agent's owner (signed in to the dashboard) may use it.
+  if (channel === "playground" && (await getUser())?.id !== agent.user_id) throw new HttpError(403, "The playground is only available to the agent's owner");
 
   const prepared = await prepareAnswer(agent, sessionId, channel, message); // reserves a credit; refunds itself on error
 

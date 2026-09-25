@@ -4,6 +4,7 @@ import { q } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { handle } from "@/lib/http";
 import { ownAgent } from "@/lib/agents";
+import { MAX_ALLOWED_DOMAINS, normalizeDomain } from "@/lib/domains";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +25,20 @@ const patch = z.object({
   handoffEnabled: z.boolean().optional(),
   handoffMessage: z.string().trim().min(1).max(300).optional(),
   notifyEmail: z.boolean().optional(),
+  allowedDomains: z
+    .array(z.string().max(300))
+    .max(MAX_ALLOWED_DOMAINS, `Add up to ${MAX_ALLOWED_DOMAINS} websites`)
+    .transform((list, ctx) => {
+      const out = new Set<string>();
+      for (const raw of list) {
+        if (!raw.trim()) continue;
+        const d = normalizeDomain(raw);
+        if (d) out.add(d);
+        else ctx.addIssue({ code: "custom", message: `“${raw.trim().slice(0, 60)}” isn't a website address` });
+      }
+      return [...out];
+    })
+    .optional(),
 });
 
 export const PATCH = handle<Ctx>(async (req, { params }) => {
@@ -32,7 +47,7 @@ export const PATCH = handle<Ctx>(async (req, { params }) => {
   const b = patch.parse(await req.json());
   await q(
     `UPDATE agents SET name = $2, instructions = $3, welcome_message = $4, brand_color = $5,
-            handoff_enabled = $6, handoff_message = $7, notify_email = $8 WHERE id = $1`,
+            handoff_enabled = $6, handoff_message = $7, notify_email = $8, allowed_domains = $9 WHERE id = $1`,
     [
       agent.id,
       b.name ?? agent.name,
@@ -42,6 +57,7 @@ export const PATCH = handle<Ctx>(async (req, { params }) => {
       b.handoffEnabled ?? agent.handoff_enabled,
       b.handoffMessage ?? agent.handoff_message,
       b.notifyEmail ?? agent.notify_email,
+      b.allowedDomains ?? agent.allowed_domains,
     ]
   );
   return NextResponse.json({ ok: true });

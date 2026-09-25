@@ -8,6 +8,8 @@ import { decryptSecret, encryptSecret, safeEqual } from "../src/lib/crypto.ts";
 import { phoneFromSession, wantsHuman } from "../src/lib/handoff-intent.ts";
 import { createThinkFilter } from "../src/lib/providers/think.ts";
 import { normalizeTurns } from "../src/lib/providers/turns.ts";
+import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
+import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
 
 process.env.AUTH_SECRET ??= "unit-test-secret-unit-test-secret-1234";
 
@@ -147,4 +149,54 @@ test("normalizeTurns: merges same-role turns and never starts with the assistant
     { role: "assistant", content: "A team member will reply\n\nHi, Ramesh here" },
     { role: "user", content: "thanks, and the price?" },
   ]);
+});
+
+test("parseMarkdown: paragraphs, headings, lists and code blocks", () => {
+  const blocks = parseMarkdown("## Refunds\nYou can return items.\nWithin 7 days.\n\n- UPI\n- Cards\n\n1. Pack it\n2. Ship it\n\n```\nraw *text*\n```");
+  assert.deepEqual(blocks.map((b) => b.t), ["h", "p", "ul", "ol", "pre"]);
+  assert.equal(blocks[1].lines.length, 2);
+  assert.equal(blocks[2].items.length, 2);
+  assert.equal(blocks[3].start, 1);
+  assert.equal(blocks[4].v, "raw *text*");
+});
+
+test("parseInline: bold, italic, code, links; citations and unclosed syntax stay text", () => {
+  assert.deepEqual(parseInline("**Free** delivery [1]"), [{ t: "b", c: [{ t: "text", v: "Free" }] }, { t: "text", v: " delivery [1]" }]);
+  assert.deepEqual(parseInline("*note*"), [{ t: "i", c: [{ t: "text", v: "note" }] }]);
+  assert.deepEqual(parseInline("use `a*b*c`"), [{ t: "text", v: "use " }, { t: "code", v: "a*b*c" }]);
+  assert.deepEqual(parseInline("[Shop](https://x.in/s)"), [{ t: "a", href: "https://x.in/s", c: [{ t: "text", v: "Shop" }] }]);
+  assert.deepEqual(parseInline("see https://x.in/faq."), [{ t: "text", v: "see " }, { t: "a", href: "https://x.in/faq", c: [{ t: "text", v: "https://x.in/faq" }] }, { t: "text", v: "." }]);
+  assert.deepEqual(parseInline("**still stream"), [{ t: "text", v: "**still stream" }]);
+  assert.deepEqual(parseInline("2 * 3 * 4"), [{ t: "text", v: "2 * 3 * 4" }]);
+});
+
+test("parseInline: only http(s) links become links", () => {
+  assert.ok(parseInline("[x](javascript:alert(1))").every((n) => n.t === "text"));
+});
+
+test("normalizeDomain: accepts hosts and URLs, rejects junk", () => {
+  assert.equal(normalizeDomain("https://www.Example.com/contact"), "www.example.com");
+  assert.equal(normalizeDomain(" shop.example.co.in "), "shop.example.co.in");
+  assert.equal(normalizeDomain("localhost"), "localhost");
+  for (const bad of ["", "not a domain", "example", "http://", "exa_mple.com"]) assert.equal(normalizeDomain(bad), null, bad);
+});
+
+test("hostAllowed: exact host and subdomains only; empty list allows all", () => {
+  assert.ok(hostAllowed("anything.com", []));
+  assert.ok(hostAllowed("example.com", ["example.com"]));
+  assert.ok(hostAllowed("www.example.com", ["example.com"]));
+  assert.ok(!hostAllowed("badexample.com", ["example.com"]));
+  assert.ok(!hostAllowed("example.com.evil.io", ["example.com"]));
+});
+
+test("embedAllowed: framed pages must come from an allowed site", () => {
+  const base = { allowed: ["shop.in"], selfHost: "app.test" };
+  assert.ok(embedAllowed({ ...base, allowed: [], dest: "iframe", referer: "https://evil.io/" }));
+  assert.ok(embedAllowed({ ...base, dest: "iframe", referer: "https://www.shop.in/" }));
+  assert.ok(!embedAllowed({ ...base, dest: "iframe", referer: "https://evil.io/" }));
+  assert.ok(!embedAllowed({ ...base, dest: "iframe", referer: null }), "referer stripped");
+  assert.ok(embedAllowed({ ...base, dest: "document", referer: "https://evil.io/" }), "full-page link");
+  assert.ok(embedAllowed({ ...base, dest: "iframe", referer: "https://app.test/dashboard" }), "own app");
+  assert.ok(!embedAllowed({ ...base, dest: null, referer: "https://evil.io/" }), "old browser with referer");
+  assert.ok(embedAllowed({ ...base, dest: null, referer: null }), "old browser, nothing to judge by");
 });

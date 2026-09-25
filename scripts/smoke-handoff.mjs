@@ -103,6 +103,7 @@ async function waitMails(n, timeout = 6000) {
 function client() {
   let cookie = "";
   return {
+    cookie: () => cookie,
     async json(path, { method = "GET", body } = {}) {
       const res = await fetch(BASE + path, { method, headers: { ...(body ? { "content-type": "application/json" } : {}), ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
       const set = res.headers.getSetCookie?.() ?? [];
@@ -116,8 +117,8 @@ const pub = async (path, opts = {}) => {
   return { status: res.status, data: await res.json().catch(() => ({})) };
 };
 /** Widget chat call: returns the NDJSON events. */
-async function chat(agentId, sessionId, message, channel = "widget") {
-  const res = await fetch(`${BASE}/api/chat/${agentId}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message, sessionId, channel }) });
+async function chat(agentId, sessionId, message, channel = "widget", cookie = "") {
+  const res = await fetch(`${BASE}/api/chat/${agentId}`, { method: "POST", headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) }, body: JSON.stringify({ message, sessionId, channel }) });
   assert.equal(res.status, 200, `chat failed: ${res.status}`);
   const events = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l));
   return { events, answer: events.filter((e) => e.type === "delta").map((e) => e.text).join(""), handoff: events.find((e) => e.type === "handoff") };
@@ -276,7 +277,7 @@ try {
   ok("when the owner replies on their own, the assistant stops talking over them");
 
   // playground never hands off
-  const pg = await chat(agentId, sid(), "talk to a human", "playground");
+  const pg = await chat(agentId, sid(), "talk to a human", "playground", a.cookie());
   assert.equal(pg.handoff, undefined);
   assert.ok(pg.answer.length > 0);
   ok("the dashboard playground is never handed off (the owner is testing)");

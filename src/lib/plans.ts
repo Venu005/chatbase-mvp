@@ -1,7 +1,7 @@
 // Placeholder plans and INR prices - tune these to your own unit economics.
-// A "credit" is one AI reply. Billing is not wired up in this MVP: change a
-// user's plan with SQL (UPDATE users SET plan='starter' WHERE email=...) or
-// add Razorpay subscriptions (see README roadmap).
+// A "credit" is one AI reply. Paid plans are sold through Razorpay subscriptions
+// (src/lib/billing.ts, docs/billing-razorpay.md); users.plan changes only on
+// Razorpay's signed webhook, or manually with SQL.
 export const PLANS = {
   free: { name: "Free", priceInr: 0, credits: 50, agents: 1 },
   starter: { name: "Starter", priceInr: 999, credits: 1000, agents: 3 },

@@ -14,6 +14,7 @@ type Agent = {
   handoff_enabled: boolean;
   handoff_message: string;
   notify_email: boolean;
+  allowed_domains: string[];
 };
 type Source = { id: string; type: string; title: string; url: string | null; status: "processing" | "ready" | "failed"; error: string | null; char_count: number; chunk_count: number };
 type Convo = {
@@ -104,7 +105,7 @@ export default function AgentWorkspace({ id }: { id: string }) {
           }}
         />
       )}
-      {tab === "Embed" && <EmbedTab agentId={id} />}
+      {tab === "Embed" && <EmbedTab agent={agent} onSaved={load} />}
       {tab === "WhatsApp" && <WhatsAppTab agentId={id} />}
       {tab === "Chats" && <ChatsTab agentId={id} convos={convos} refresh={loadConvos} handoffEnabled={agent.handoff_enabled} />}
     </main>
@@ -166,6 +167,12 @@ function SourcesTab({ agentId }: { agentId: string }) {
     }
   }
 
+  async function retry(sid: string) {
+    setError("");
+    await api(`/api/agents/${agentId}/sources/${sid}`, { method: "POST" }).catch((e) => setError(e.message));
+    await load();
+  }
+
   async function remove(sid: string) {
     if (!window.confirm("Remove this source? The agent will forget it.")) return;
     await api(`/api/agents/${agentId}/sources/${sid}`, { method: "DELETE" }).catch((e) => setError(e.message));
@@ -217,6 +224,9 @@ function SourcesTab({ agentId }: { agentId: string }) {
               </div>
             </div>
             <span className={`badge ${s.status}`}>{s.status}</span>
+            {s.status === "failed" && s.type === "url" && (
+              <button className="link-btn" onClick={() => retry(s.id)}>Retry</button>
+            )}
             <button className="link-btn" onClick={() => remove(s.id)}>Remove</button>
           </li>
         ))}
@@ -296,11 +306,29 @@ function SettingsTab({ agent, onSaved }: { agent: Agent; onSaved: () => void }) 
 }
 
 // ---------------------------------------------------------------------------
-function EmbedTab({ agentId }: { agentId: string }) {
+function EmbedTab({ agent, onSaved }: { agent: Agent; onSaved: () => void }) {
+  const agentId = agent.id;
   const [origin, setOrigin] = useState("");
+  const [domains, setDomains] = useState(agent.allowed_domains.join("\n"));
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
+
+  async function saveDomains(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setMsg("");
+    try {
+      await api(`/api/agents/${agentId}`, { method: "PATCH", ...json({ allowedDomains: domains.split(/[\n,]+/) }) });
+      setMsg("Saved");
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   const snippet = `<script src="${origin}/widget.js" data-agent-id="${agentId}" defer></script>`;
   return (
     <section className="card stack">
@@ -309,6 +337,20 @@ function EmbedTab({ agentId }: { agentId: string }) {
       <pre className="code">{snippet}</pre>
       <button className="btn" onClick={() => navigator.clipboard?.writeText(snippet)}>Copy snippet</button>
       <p className="muted">Or share the full-page chat link: <a href={`/embed/${agentId}`} target="_blank" rel="noopener noreferrer">{origin}/embed/{agentId}</a></p>
+      <form className="stack" onSubmit={saveDomains}>
+        <h3>Allowed websites</h3>
+        <p className="muted">
+          Only show the chat on these websites, so nobody else can put your assistant on their site and use up your message
+          credits. One per line, e.g. <code>yourbusiness.in</code> (subdomains like www. are included). Leave empty to allow any
+          website. The full-page chat link keeps working.
+        </p>
+        <textarea rows={3} value={domains} onChange={(e) => setDomains(e.target.value)} placeholder={"yourbusiness.in\nshop.yourbusiness.in"} aria-label="Allowed websites" />
+        {error && <p className="error-text">{error}</p>}
+        {msg && <p className="ok-text">{msg}</p>}
+        <div>
+          <button className="btn">Save websites</button>
+        </div>
+      </form>
     </section>
   );
 }

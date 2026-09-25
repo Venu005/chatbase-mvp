@@ -185,9 +185,9 @@ export async function indexDocs(sourceId: string, agentId: string, docs: Doc[]):
       });
       await q(`INSERT INTO chunks (source_id, agent_id, page_title, page_url, content, embedding) VALUES ${values.join(",")}`, params);
     }
-    await q("UPDATE sources SET status='ready', error=NULL, char_count=$2, chunk_count=$3 WHERE id=$1", [sourceId, chars, pieces.length]);
+    await q("UPDATE sources SET status='ready', error=NULL, char_count=$2, chunk_count=$3, updated_at=now() WHERE id=$1", [sourceId, chars, pieces.length]);
   } catch (e) {
     await q("DELETE FROM chunks WHERE source_id=$1", [sourceId]).catch(() => {});
-    await q("UPDATE sources SET status='failed', error=$2 WHERE id=$1", [sourceId, String((e as Error).message).slice(0, 500)]).catch(() => {});
+    await q("UPDATE sources SET status='failed', error=$2, updated_at=now() WHERE id=$1", [sourceId, String((e as Error).message).slice(0, 500)]).catch(() => {});
   }
 }

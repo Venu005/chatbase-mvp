@@ -21,6 +21,19 @@ function getTransport(): Transporter | null {
 
 export const smtpConfigured = () => !!env("SMTP_URL");
 
+/** Sends a plain-text e-mail. Returns false (and logs) when SMTP isn't configured or sending fails; never throws. */
+export async function sendEmail(to: string, subject: string, text: string): Promise<boolean> {
+  const t = getTransport();
+  if (!t) return false;
+  try {
+    await t.sendMail({ from: envStr("EMAIL_FROM", "Chatbase India <noreply@localhost>"), to, subject: subject.replace(/[\r\n]+/g, " "), text });
+    return true;
+  } catch (e) {
+    console.error("E-mail failed:", (e as Error).message);
+    return false;
+  }
+}
+
 const COOLDOWN_MINUTES = envNum("HANDOFF_EMAIL_COOLDOWN_MINUTES", 15);
 
 type Row = {
@@ -57,8 +70,7 @@ export async function notifyOwner(conversationId: string, opts: { force?: boolea
       [conversationId]
     );
     if (!r || !r.notify_email) return;
-    const t = getTransport();
-    if (!t) return;
+    if (!getTransport()) return;
 
     const base = envStr("APP_URL", "http://localhost:3000").replace(/\/$/, "");
     const link = `${base}/dashboard/agents/${r.agent_id}?c=${r.conversation_id}#chats`;
@@ -80,12 +92,7 @@ export async function notifyOwner(conversationId: string, opts: { force?: boolea
       .filter((l, i, arr) => l !== "" || arr[i - 1] !== "")
       .join("\n");
 
-    await t.sendMail({
-      from: envStr("EMAIL_FROM", "Chatbase India <noreply@localhost>"),
-      to: r.owner_email,
-      subject: subject.replace(/[\r\n]+/g, " "),
-      text,
-    });
+    await sendEmail(r.owner_email, subject, text);
   } catch (e) {
     console.error("Handoff e-mail failed:", (e as Error).message);
   }

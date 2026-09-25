@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Markdown from "./Markdown";
 
 type Citation = { n: number; title: string; url: string | null };
 type Msg = { role: "user" | "assistant" | "human"; content: string; citations?: Citation[]; error?: boolean };
@@ -197,7 +198,13 @@ export default function ChatBox({
           <div key={i} className={`bubble-row ${m.role}`}>
             <div className={`bubble ${m.role}${m.error ? " error" : ""}`} style={m.role === "user" ? { background: color } : undefined}>
               {m.role === "human" && <span className="human-label">Team</span>}
-              {m.content || (busy && i === messages.length - 1 ? <span className="typing">●●●</span> : "")}
+              {m.content ? (
+                m.role === "assistant" && !m.error ? <Markdown text={m.content} /> : m.content
+              ) : busy && i === messages.length - 1 ? (
+                <span className="typing">●●●</span>
+              ) : (
+                ""
+              )}
               {!!m.citations?.length && (
                 <div className="cites">
                   {m.citations.map((c) =>

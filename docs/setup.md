@@ -100,7 +100,7 @@ connection. Manual connections need no variables.
 
 | Variable | Default | What it is |
 | --- | --- | --- |
-| `SMTP_URL` | blank | e.g. `smtps://user:pass@smtp.example.com:465` or `smtp://user:pass@smtp.example.com:587`. Blank means no e-mails. |
+| `SMTP_URL` | blank | e.g. `smtps://user:pass@smtp.example.com:465` or `smtp://user:pass@smtp.example.com:587`. Blank means no e-mails (handoff alerts and password reset links; in development the reset link is printed to the server log instead). |
 | `EMAIL_FROM` | `Chatbase India <noreply@localhost>` | Sender. Must be an address your SMTP provider allows. |
 | `HANDOFF_EMAIL_COOLDOWN_MINUTES` | `15` | At most one alert e-mail per conversation per this many minutes. |
 | `HANDOFF_AUTO_RESUME_HOURS` | `24` | A customer nobody answered for this long is handed back to the assistant. `0` disables. |
