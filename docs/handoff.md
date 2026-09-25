@@ -30,8 +30,8 @@ Asking for a person is free: it uses no message credit.
   assistant without waiting for the customer to ask.
 
 While a person is handling a conversation the assistant does not answer, uses no credits, and every new customer message is
-flagged "Needs reply". Images and voice notes on WhatsApp appear as a note that media arrived (open WhatsApp on your phone to
-view them; media is not shown in the dashboard).
+flagged "Needs reply". WhatsApp voice notes appear as their transcript marked 🎤 (when Sarvam speech-to-text is set up);
+images and other media appear as a note that media arrived (open WhatsApp on your phone to view them).
 
 ## Settings (agent, Settings tab)
 
