@@ -22,6 +22,7 @@ type Convo = {
   channel: string;
   updated_at: string;
   message_count: number;
+  thumbs_down: number;
   first_message: string | null;
   last_visitor_message: string | null;
   mode: "bot" | "human";
@@ -29,7 +30,7 @@ type Convo = {
   contact: string | null;
   handoff_reason: string | null;
 };
-type Message = { id: number; role: string; content: string; created_at: string };
+type Message = { id: number; role: string; content: string; created_at: string; feedback: 1 | -1 | null };
 
 const TABS = ["Sources", "Playground", "Settings", "Embed", "WhatsApp", "Chats"] as const;
 type Tab = (typeof TABS)[number];
@@ -629,6 +630,7 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
                 <span>
                   {v.needs_reply && <span className="badge alert">Needs reply</span>}
                   {!v.needs_reply && v.mode === "human" && <span className="badge team">With team</span>}
+                  {v.thumbs_down > 0 && <span className="badge failed" title="Answers the visitor marked as not helpful">👎 {v.thumbs_down}</span>}
                   {v.contact && <span className="muted small"> {v.contact}</span>}
                 </span>
                 <strong>{(v.needs_reply ? v.last_visitor_message : v.first_message)?.slice(0, 80) ?? "(empty)"}</strong>
@@ -657,6 +659,8 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
                 {detail.messages.map((m) => (
                   <p key={m.id} className={`msg ${m.role}`}>
                     <strong>{m.role === "user" ? "Customer" : m.role === "human" ? "You" : "Assistant"}:</strong> {m.content}
+                    {m.feedback === 1 && <span className="small muted" title="The visitor found this helpful"> 👍</span>}
+                    {m.feedback === -1 && <span className="small error-text" title="The visitor marked this as not helpful"> 👎 not helpful</span>}
                   </p>
                 ))}
               </div>

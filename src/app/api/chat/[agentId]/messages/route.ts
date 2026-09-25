@@ -35,8 +35,8 @@ export const GET = handle<Ctx>(async (req, { params }) => {
   const messages =
     p.all === "1"
       ? await q(
-          `SELECT id, role, content, citations, created_at FROM (
-             SELECT id, role, content, citations, created_at FROM messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT 100
+          `SELECT id, role, content, citations, feedback, latency_ms IS NOT NULL AS rateable, created_at FROM (
+             SELECT id, role, content, citations, feedback, latency_ms, created_at FROM messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT 100
            ) t ORDER BY id`,
           [convo.id]
         )

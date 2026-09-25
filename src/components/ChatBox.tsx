@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "./Markdown";
 
 type Citation = { n: number; title: string; url: string | null };
-type Msg = { role: "user" | "assistant" | "human"; content: string; citations?: Citation[]; error?: boolean };
-type Remote = { id: number; role: "user" | "assistant" | "human"; content: string; citations?: Citation[] };
+type Rating = "up" | "down" | null;
+/** `id` is set on bot answers that can be rated (👍/👎). */
+type Msg = { role: "user" | "assistant" | "human"; content: string; citations?: Citation[]; error?: boolean; id?: number; rating?: Rating };
+type Remote = { id: number; role: "user" | "assistant" | "human"; content: string; citations?: Citation[]; feedback?: 1 | -1 | null; rateable?: boolean };
 
 function newId(): string {
   const a = new Uint8Array(16);
@@ -69,7 +71,14 @@ export default function ChatBox({
         if (cancelled || !j) return;
         if (j.hasContact) setContactState("saved");
         if (j.messages.length) {
-          setMessages(j.messages.map((m) => ({ role: m.role, content: m.content, citations: m.role === "assistant" && m.citations?.length ? m.citations : undefined })));
+          setMessages(
+            j.messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+              citations: m.role === "assistant" && m.citations?.length ? m.citations : undefined,
+              ...(m.rateable ? { id: Number(m.id), rating: m.feedback === 1 ? "up" : m.feedback === -1 ? "down" : null } : {}),
+            }))
+          );
           lastHuman.current = Math.max(0, ...j.messages.filter((m) => m.role === "human").map((m) => m.id));
         }
         setMode(j.mode);
@@ -142,6 +151,18 @@ export default function ChatBox({
     lastHuman.current = 0;
   }
 
+  async function rate(id: number, current: Rating, clicked: "up" | "down") {
+    const rating = current === clicked ? null : clicked; // clicking the same thumb again clears it
+    const set = (r: Rating) => setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, rating: r } : m)));
+    set(rating);
+    const r = await fetch(`/api/chat/${agentId}/feedback`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionId, messageId: id, rating }),
+    }).catch(() => null);
+    if (!r?.ok) set(current);
+  }
+
   const patchLast = (fn: (m: Msg) => Msg) => setMessages((ms) => ms.map((m, i) => (i === ms.length - 1 ? fn(m) : m)));
 
   async function send(e: React.FormEvent) {
@@ -175,7 +196,7 @@ export default function ChatBox({
           if (!l) continue;
           const ev = JSON.parse(l);
           if (ev.type === "delta") patchLast((m) => ({ ...m, content: m.content + ev.text }));
-          else if (ev.type === "done") patchLast((m) => ({ ...m, citations: ev.citations }));
+          else if (ev.type === "done") patchLast((m) => ({ ...m, citations: ev.citations, ...(ev.messageId ? { id: ev.messageId, rating: null } : {}) }));
           else if (ev.type === "handoff") {
             // A person is handling this chat: no bot reply. Show the notice (first time only) instead of the empty bubble.
             setMode("human");
@@ -218,6 +239,16 @@ export default function ChatBox({
                       </span>
                     )
                   )}
+                </div>
+              )}
+              {channel === "widget" && m.id !== undefined && !(busy && i === messages.length - 1) && (
+                <div className="rate" role="group" aria-label="Was this answer helpful?">
+                  <button type="button" aria-pressed={m.rating === "up"} aria-label="Helpful" title="Helpful" onClick={() => rate(m.id!, m.rating ?? null, "up")}>
+                    👍
+                  </button>
+                  <button type="button" aria-pressed={m.rating === "down"} aria-label="Not helpful" title="Not helpful" onClick={() => rate(m.id!, m.rating ?? null, "down")}>
+                    👎
+                  </button>
                 </div>
               )}
             </div>

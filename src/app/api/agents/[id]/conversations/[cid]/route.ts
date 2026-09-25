@@ -22,7 +22,7 @@ export const GET = handle<Ctx>(async (_req, { params }) => {
     [cid, agent.id]
   );
   if (!conversation) throw new HttpError(404, "Conversation not found");
-  const messages = await q("SELECT id, role, content, citations, created_at FROM messages WHERE conversation_id = $1 ORDER BY id", [cid]);
+  const messages = await q("SELECT id, role, content, citations, feedback, created_at FROM messages WHERE conversation_id = $1 ORDER BY id", [cid]);
   return NextResponse.json({ conversation, messages });
 });
 

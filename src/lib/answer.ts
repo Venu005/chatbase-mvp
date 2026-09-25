@@ -104,11 +104,13 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
   }
 }
 
-export async function saveAnswer(p: Prepared, answer: string): Promise<void> {
-  await q(
-    "INSERT INTO messages (conversation_id, role, content, citations, latency_ms) VALUES ($1,'assistant',$2,$3,$4)",
+/** Stores the bot's reply; returns its message id (the widget uses it for 👍/👎 feedback). */
+export async function saveAnswer(p: Prepared, answer: string): Promise<number> {
+  const row = await q1<{ id: string }>(
+    "INSERT INTO messages (conversation_id, role, content, citations, latency_ms) VALUES ($1,'assistant',$2,$3,$4) RETURNING id",
     [p.conversationId, answer, JSON.stringify(p.citations), Date.now() - p.started]
   );
+  return Number(row!.id);
 }
 
 /** Citations the model actually used; falls back to everything retrieved if it didn't cite inline. */

@@ -111,6 +111,10 @@ label input, label textarea { font-weight: 400; }
 .bubble.user { color: #fff; border-bottom-right-radius: 4px; }
 .bubble.error { color: var(--danger); }
 .md { white-space: normal; }
+.rate { display: flex; gap: 4px; margin-top: 6px; }
+.rate button { font-size: 13px; line-height: 1; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer; opacity: .55; filter: grayscale(1); }
+.rate button:hover, .rate button[aria-pressed="true"] { opacity: 1; filter: none; }
+.rate button[aria-pressed="true"] { background: var(--surface); border-color: currentColor; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
 .md p, .md ul, .md ol, .md pre { margin: 0 0 8px; }
