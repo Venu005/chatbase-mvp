@@ -122,6 +122,35 @@ try {
   assert.equal((await a.json(`/api/agents/${agentId}/fixes`, { method: "POST", body: { question: "", answer: "" } })).status, 400);
   ok("Q&A answers are private to the agent's owner and validated");
 
+  // ---- Analytics ------------------------------------------------------------------------------------
+  const gapQ = "Do you sell gift cards?";
+  await chat(agentId, sid(), gapQ);
+  await chat(agentId, sid(), "do you sell gift cards?  ");
+  await chat(agentId, sid(), "Do you sell gift cards?", { channel: "playground", cookie: a.cookie() }); // owner test: not counted
+  const S9 = sid();
+  const r9 = await chat(agentId, S9, "Are returns accepted?");
+  await rate(S9, r9.done.messageId, "down");
+  const an = (await a.json(`/api/agents/${agentId}/analytics?days=7`)).data;
+  assert.equal(an.series.length, 7);
+  assert.equal(an.series.at(-1).conversations, an.totals.conversations, "all of today's conversations are in today's column");
+  assert.ok(!an.channels.some((c) => c.channel === "playground"));
+  const widgetConvos = (await a.json(`/api/agents/${agentId}/conversations`)).data.conversations.filter((c) => c.channel === "widget").length;
+  assert.equal(an.totals.conversations, widgetConvos);
+  const gap = an.gaps.find((g) => g.question.toLowerCase().startsWith("do you sell gift cards"));
+  assert.equal(gap?.times, 2, JSON.stringify(an.gaps));
+  assert.ok(an.totals.gaps >= 2 && an.totals.answers > an.totals.gaps);
+  assert.ok(an.disliked.some((d) => Number(d.message_id) === r9.done.messageId && d.question === "Are returns accepted?" && d.times === 1 && !d.fixed));
+  assert.equal(an.totals.thumbs_down, 1);
+  ok("analytics: daily series, totals, knowledge gaps (grouped, playground excluded) and 👎 answers");
+
+  await a.json(`/api/agents/${agentId}/fixes`, { method: "POST", body: { question: gapQ, answer: "Yes, gift cards from ₹500." } });
+  const after = await chat(agentId, sid(), gapQ);
+  assert.ok(after.text.includes("gift cards from ₹500"), after.text);
+  assert.equal((await a.json(`/api/agents/${agentId}/analytics?days=7`)).data.totals.gaps, an.totals.gaps, "a question answered by a Q&A fix is not a gap");
+  assert.equal((await b.json(`/api/agents/${agentId}/analytics`)).status, 404);
+  assert.equal((await a.json(`/api/agents/${agentId}/analytics?days=12`)).status, 400);
+  ok("answering a gap closes it; analytics are private and validated");
+
   console.log(`\nAll ${passed} feature checks passed.`);
 } catch (e) {
   console.error("\n✗ FAILED:", e.stack ?? e.message);

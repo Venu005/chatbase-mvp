@@ -110,8 +110,8 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
 /** Stores the bot's reply; returns its message id (the widget uses it for 👍/👎 feedback). */
 export async function saveAnswer(p: Prepared, answer: string): Promise<number> {
   const row = await q1<{ id: string }>(
-    "INSERT INTO messages (conversation_id, role, content, citations, latency_ms) VALUES ($1,'assistant',$2,$3,$4) RETURNING id",
-    [p.conversationId, answer, JSON.stringify(p.citations), Date.now() - p.started]
+    "INSERT INTO messages (conversation_id, role, content, citations, latency_ms, knowledge_gap) VALUES ($1,'assistant',$2,$3,$4,$5) RETURNING id",
+    [p.conversationId, answer, JSON.stringify(p.citations), Date.now() - p.started, !p.citations.length && !p.fixMatched]
   );
   return Number(row!.id);
 }
