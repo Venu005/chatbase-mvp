@@ -172,6 +172,12 @@ try {
   assert.ok(wa && wa.message_count === 4, JSON.stringify(convos));
   ok("WhatsApp chats use message credits and appear in the dashboard's Chats tab");
 
+  const leads = (await a.json(`/api/agents/${agentId}/leads`)).data.leads;
+  const ravi = leads.find((l) => l.phone === "+919811111111");
+  assert.ok(ravi && ravi.name === "Ravi" && ravi.source === "whatsapp", JSON.stringify(leads));
+  assert.equal(leads.filter((l) => l.phone === "+919811111111").length, 1, "one lead per WhatsApp number");
+  ok("WhatsApp customers are saved as leads with their number and profile name");
+
   // ---- isolation & lifecycle --------------------------------------------------------------------
   const b = client();
   await b.json("/api/auth/signup", { method: "POST", body: { email: `wa2${Date.now()}@example.com`, password: "another-password-1" } });

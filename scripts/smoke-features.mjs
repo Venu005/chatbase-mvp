@@ -151,6 +151,58 @@ try {
   assert.equal((await a.json(`/api/agents/${agentId}/analytics?days=12`)).status, 400);
   ok("answering a gap closes it; analytics are private and validated");
 
+  // ---- Lead capture ---------------------------------------------------------------------------------
+  const pubAgent = async () => (await fetch(`${BASE}/embed/${agentId}`)).text();
+  const submitLead = (sessionId, body) => client().json(`/api/chat/${agentId}/lead`, { method: "POST", body: { sessionId, ...body } });
+  assert.equal((await submitLead(sid(), { name: "X", phone: "9876543210" })).status, 403, "lead form is off by default");
+  assert.equal((await a.json(`/api/agents/${agentId}`, { method: "PATCH", body: { leadFields: [] } })).status, 400);
+  assert.equal(
+    (await a.json(`/api/agents/${agentId}`, { method: "PATCH", body: { leadMode: "before_chat", leadFields: ["phone", "name"], leadMessage: "Tell us who you are" } })).status,
+    200
+  );
+  assert.deepEqual((await a.json(`/api/agents/${agentId}`)).data.agent.lead_fields, ["name", "phone"]);
+  assert.ok((await pubAgent()).includes("Tell us who you are"));
+
+  const L1 = sid();
+  assert.equal((await chat(agentId, L1, "hello")).status, 428, "before_chat: messages need the form first");
+  assert.equal((await submitLead(L1, { name: "Ravi" })).status, 400, "phone is required");
+  assert.equal((await submitLead(L1, { name: "Ravi", phone: "call me" })).status, 400);
+  assert.equal((await submitLead(L1, { name: "Ravi Kumar", phone: "+91 98765-43210", email: "ignored@x.in" })).status, 200);
+  assert.equal((await client().json(`/api/chat/${agentId}/messages?sessionId=${L1}&all=1`)).data.hasLead, true);
+  assert.equal((await chat(agentId, L1, "How long does delivery take?")).status, 200);
+  assert.equal((await chat(agentId, sid(), "hi", { channel: "playground", cookie: a.cookie() })).status, 200, "the playground is never gated");
+  ok("lead form: validated fields, required before chatting when set so, remembered for the visitor");
+
+  await a.json(`/api/agents/${agentId}`, { method: "PATCH", body: { leadMode: "after_first_answer" } });
+  const L2 = sid();
+  assert.equal((await chat(agentId, L2, "Are returns accepted?")).status, 200, "after_first_answer never blocks");
+  await client().json(`/api/chat/${agentId}/handoff`, { method: "POST", body: { sessionId: L2, contact: "=cmd@evil.in" } });
+  const L3 = sid();
+  await client().json(`/api/chat/${agentId}/handoff`, { method: "POST", body: { sessionId: L3, contact: "priya@example.in" } });
+  const leads = (await a.json(`/api/agents/${agentId}/leads`)).data.leads;
+  const ravi = leads.find((l) => l.name === "Ravi Kumar");
+  assert.ok(ravi && ravi.phone === "+919876543210" && ravi.email === null && ravi.source === "form" && ravi.first_message === "How long does delivery take?", JSON.stringify(ravi));
+  assert.ok(leads.some((l) => l.email === "priya@example.in" && l.source === "handoff"));
+  assert.ok(leads.some((l) => l.email === "=cmd@evil.in"), "a weird but valid e-mail is still a lead");
+  ok("contact details left when asking for a person become leads");
+
+  const csvRes = await a.req(`/api/agents/${agentId}/leads?format=csv`);
+  const bytes = Buffer.from(await csvRes.arrayBuffer());
+  assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], "UTF-8 BOM so Excel reads Unicode");
+  const csv = bytes.toString("utf8");
+  assert.match(csvRes.headers.get("content-type"), /text\/csv/);
+  assert.match(csvRes.headers.get("content-disposition"), /attachment; filename="leads-Feature-Bot-/);
+  assert.ok(csv.startsWith("\ufeffName,E-mail,Phone,Channel,Captured via,Date,First question"), csv.slice(0, 80));
+  assert.ok(csv.includes("Ravi Kumar,,+919876543210,widget,form,"));
+  assert.ok(csv.includes(",'=cmd@evil.in,"), "formula-like cells are defused");
+  ok("leads download as CSV (Excel-friendly, formula injection defused)");
+
+  assert.equal((await b.json(`/api/agents/${agentId}/leads`)).status, 404);
+  assert.equal((await b.json(`/api/agents/${agentId}/leads/${ravi.id}`, { method: "DELETE" })).status, 404);
+  assert.equal((await a.json(`/api/agents/${agentId}/leads/${ravi.id}`, { method: "DELETE" })).status, 200);
+  assert.ok(!(await a.json(`/api/agents/${agentId}/leads`)).data.leads.some((l) => l.id === ravi.id));
+  ok("leads are private to the owner and can be deleted");
+
   console.log(`\nAll ${passed} feature checks passed.`);
 } catch (e) {
   console.error("\n✗ FAILED:", e.stack ?? e.message);

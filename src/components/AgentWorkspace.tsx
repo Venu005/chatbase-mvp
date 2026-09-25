@@ -6,6 +6,7 @@ import { api, json } from "@/lib/client";
 import ChatBox from "./ChatBox";
 import FixForm from "./FixForm";
 import Analytics from "./Analytics";
+import Leads from "./Leads";
 
 type Agent = {
   id: string;
@@ -17,6 +18,9 @@ type Agent = {
   handoff_message: string;
   notify_email: boolean;
   allowed_domains: string[];
+  lead_mode: "off" | "after_first_answer" | "before_chat";
+  lead_fields: ("name" | "email" | "phone")[];
+  lead_message: string;
 };
 type Source = { id: string; type: string; title: string; url: string | null; status: "processing" | "ready" | "failed"; error: string | null; char_count: number; chunk_count: number };
 type Convo = {
@@ -35,7 +39,7 @@ type Convo = {
 type Message = { id: number; role: string; content: string; created_at: string; feedback: 1 | -1 | null; bot: boolean; fixed: boolean };
 type Fix = { id: string; question: string; answer: string; message_id: string | null; updated_at: string };
 
-const TABS = ["Sources", "Q&A", "Playground", "Settings", "Embed", "WhatsApp", "Chats", "Analytics"] as const;
+const TABS = ["Sources", "Q&A", "Playground", "Settings", "Embed", "WhatsApp", "Chats", "Leads", "Analytics"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function AgentWorkspace({ id }: { id: string }) {
@@ -113,6 +117,17 @@ export default function AgentWorkspace({ id }: { id: string }) {
       {tab === "Embed" && <EmbedTab agent={agent} onSaved={load} />}
       {tab === "WhatsApp" && <WhatsAppTab agentId={id} />}
       {tab === "Analytics" && <Analytics agentId={id} />}
+      {tab === "Leads" && (
+        <Leads
+          agentId={id}
+          leadMode={agent.lead_mode}
+          openChat={(cid) => {
+            // The Chats tab opens the conversation named in ?c= when it mounts (same as the e-mail links).
+            window.history.replaceState(null, "", `?c=${cid}#chats`);
+            setTab("Chats");
+          }}
+        />
+      )}
       {tab === "Chats" && <ChatsTab agentId={id} convos={convos} refresh={loadConvos} handoffEnabled={agent.handoff_enabled} />}
     </main>
   );
@@ -251,6 +266,9 @@ function SettingsTab({ agent, onSaved }: { agent: Agent; onSaved: () => void }) 
     handoffEnabled: agent.handoff_enabled,
     handoffMessage: agent.handoff_message,
     notifyEmail: agent.notify_email,
+    leadMode: agent.lead_mode,
+    leadFields: agent.lead_fields,
+    leadMessage: agent.lead_message,
   });
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
@@ -299,6 +317,41 @@ function SettingsTab({ agent, onSaved }: { agent: Agent; onSaved: () => void }) 
             <input type="checkbox" checked={f.notifyEmail} onChange={(e) => setF({ ...f, notifyEmail: e.target.checked })} />
             E-mail me when a customer is waiting for a reply
           </label>
+        </>
+      )}
+      <h3>Collect leads</h3>
+      <label>
+        Ask website visitors for their details
+        <select value={f.leadMode} onChange={(e) => setF({ ...f, leadMode: e.target.value as Agent["lead_mode"] })}>
+          <option value="off">Don&apos;t ask</option>
+          <option value="after_first_answer">After the first answer (visitors can skip)</option>
+          <option value="before_chat">Before the chat starts (required)</option>
+        </select>
+      </label>
+      {f.leadMode !== "off" && (
+        <>
+          <div className="row-form">
+            {(["name", "email", "phone"] as const).map((field) => (
+              <label key={field} className="check">
+                <input
+                  type="checkbox"
+                  checked={f.leadFields.includes(field)}
+                  onChange={(e) =>
+                    setF({ ...f, leadFields: e.target.checked ? [...f.leadFields, field] : f.leadFields.filter((x) => x !== field) })
+                  }
+                />
+                {field === "name" ? "Name" : field === "email" ? "E-mail" : "Phone"}
+              </label>
+            ))}
+          </div>
+          <label>
+            Message above the form
+            <input value={f.leadMessage} onChange={(e) => setF({ ...f, leadMessage: e.target.value })} required maxLength={300} />
+          </label>
+          <span className="muted small">
+            WhatsApp customers are always saved as leads (with their number), and so are contact details left when asking for a
+            person. {f.notifyEmail ? "You get an e-mail for each new lead from the form." : ""}
+          </span>
         </>
       )}
       {error && <p className="error-text">{error}</p>}

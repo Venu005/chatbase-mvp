@@ -151,6 +151,9 @@ label input, label textarea { font-weight: 400; }
 /* Human handoff */
 .bubble.human { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
 .human-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 2px; }
+.lead-form { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); background: var(--bg); }
+.lead-form p { margin: 0; }
+.lead-form .btn { padding: 8px 14px; }
 .talk-human { align-self: flex-start; padding: 4px 14px; font-size: 13px; }
 .handoff-contact { padding: 8px 12px; margin: 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
 .badge.alert { color: #fff; background: var(--danger); border-color: var(--danger); font-weight: 600; }
@@ -185,3 +188,6 @@ label.check input { width: auto; }
 .list.plain > li:last-child { border-bottom: 0; }
 .row-between { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .row-between > span { min-width: 0; overflow-wrap: anywhere; display: flex; flex-direction: column; gap: 2px; }
+.table-wrap { padding: 0; overflow-x: auto; }
+.data-table.leads { width: 100%; margin: 0; }
+.data-table.leads th, .data-table.leads td { padding: 10px 12px; vertical-align: top; }

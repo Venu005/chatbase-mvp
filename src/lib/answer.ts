@@ -20,6 +20,7 @@ export type AnswerAgent = {
   plan: string;
   handoff_enabled: boolean;
   handoff_message: string;
+  lead_mode: "off" | "after_first_answer" | "before_chat";
 };
 export type Channel = "widget" | "playground" | "whatsapp";
 
@@ -27,7 +28,7 @@ const HISTORY_TURNS = 10;
 
 export async function loadAgent(agentId: string): Promise<AnswerAgent | null> {
   return q1<AnswerAgent>(
-    `SELECT a.id, a.user_id, a.name, a.instructions, a.handoff_enabled, a.handoff_message, u.plan
+    `SELECT a.id, a.user_id, a.name, a.instructions, a.handoff_enabled, a.handoff_message, a.lead_mode, u.plan
        FROM agents a JOIN users u ON u.id = a.user_id WHERE a.id = $1`,
     [agentId]
   );

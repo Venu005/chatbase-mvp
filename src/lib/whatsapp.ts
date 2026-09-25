@@ -5,6 +5,7 @@ import { HttpError, rateLimit } from "./http";
 import { formatForWhatsApp } from "./wa-format";
 import { findConversation, recordVisitorMessage } from "./handoff";
 import { env, envStr } from "./env";
+import { upsertLead } from "./lead-store";
 
 // ---------------------------------------------------------------------------
 // WhatsApp Cloud API (Meta). Docs: send = POST {graph}/{version}/{phone_number_id}/messages,
@@ -92,7 +93,7 @@ export function verifySignature(rawBody: Buffer, header: string | null, appSecre
 }
 
 // ---- inbound payload ---------------------------------------------------------
-export type Incoming = { phoneNumberId: string; from: string; wamid: string; type: string; text: string };
+export type Incoming = { phoneNumberId: string; from: string; wamid: string; type: string; text: string; name?: string };
 
 /** Pulls user messages out of a webhook payload. Status updates and unknown shapes yield nothing. */
 export function extractIncoming(payload: unknown): Incoming[] {
@@ -106,9 +107,18 @@ export function extractIncoming(payload: unknown): Incoming[] {
       const v = change.value;
       const phoneNumberId = v?.metadata?.phone_number_id;
       if (typeof phoneNumberId !== "string") continue;
+      const names = new Map<string, string>();
+      for (const c of v.contacts ?? []) if (typeof c?.wa_id === "string" && typeof c?.profile?.name === "string") names.set(c.wa_id, c.profile.name.slice(0, 100));
       for (const m of v.messages ?? []) {
         if (typeof m?.id !== "string" || typeof m?.from !== "string") continue;
-        out.push({ phoneNumberId, from: m.from, wamid: m.id, type: String(m.type ?? "unknown"), text: m.type === "text" ? String(m.text?.body ?? "") : "" });
+        out.push({
+          phoneNumberId,
+          from: m.from,
+          wamid: m.id,
+          type: String(m.type ?? "unknown"),
+          text: m.type === "text" ? String(m.text?.body ?? "") : "",
+          name: names.get(m.from),
+        });
       }
     }
   }
@@ -125,6 +135,8 @@ export async function processIncoming(ch: Channel, m: Incoming): Promise<void> {
 
   const session = `wa_${m.from}`;
   if (!rateLimit(`wa:${ch.id}:${m.from}`, 10, 60_000)) return; // silently ignore floods
+  // Every WhatsApp customer is a lead: their number (and WhatsApp profile name) go to the Leads tab.
+  await upsertLead(ch.agent_id, session, "whatsapp", "whatsapp", { phone: `+${m.from}`, name: m.name }).catch((e) => console.error("Saving lead failed:", e));
   if (m.type !== "text" || !m.text.trim()) {
     // If a person is handling this chat, an image/voice note is exactly what they need to know about.
     const convo = await findConversation(ch.agent_id, session);

@@ -30,7 +30,8 @@ export const GET = handle<Ctx>(async (req, { params }) => {
     "SELECT id, mode, visitor_contact IS NOT NULL AS has_contact FROM conversations WHERE agent_id = $1 AND session_id = $2",
     [agentId, p.sessionId]
   );
-  if (!convo) return NextResponse.json({ mode: "bot", hasContact: false, messages: [] });
+  const hasLead = !!(await q1("SELECT 1 FROM leads WHERE agent_id = $1 AND session_id = $2", [agentId, p.sessionId]));
+  if (!convo) return NextResponse.json({ mode: "bot", hasContact: false, hasLead, messages: [] });
 
   const messages =
     p.all === "1"
@@ -41,5 +42,5 @@ export const GET = handle<Ctx>(async (req, { params }) => {
           [convo.id]
         )
       : await q("SELECT id, role, content, created_at FROM messages WHERE conversation_id = $1 AND role = 'human' AND id > $2 ORDER BY id LIMIT 50", [convo.id, p.after]);
-  return NextResponse.json({ mode: convo.mode, hasContact: convo.has_contact, messages });
+  return NextResponse.json({ mode: convo.mode, hasContact: convo.has_contact, hasLead, messages });
 });

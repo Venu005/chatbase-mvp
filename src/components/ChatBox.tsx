@@ -27,12 +27,71 @@ function loadSession(key: string): string {
   }
 }
 
+export type LeadConfig = { mode: "off" | "after_first_answer" | "before_chat"; fields: ("name" | "email" | "phone")[]; message: string };
+
+const LEAD_LABELS = { name: "Your name", email: "E-mail", phone: "Phone number" } as const;
+const LEAD_INPUT = {
+  name: { type: "text", autoComplete: "name" },
+  email: { type: "email", autoComplete: "email" },
+  phone: { type: "tel", autoComplete: "tel" },
+} as const;
+
+/** The lead form: one input per field the owner asked for. */
+function LeadForm({ agentId, sessionId, config, color, onDone, onSkip }: { agentId: string; sessionId: string; config: LeadConfig; color: string; onDone: () => void; onSkip?: () => void }) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const r = await fetch(`/api/chat/${agentId}/lead`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId, ...values }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error ?? "Couldn't save that. Please try again.");
+      onDone();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="lead-form" onSubmit={submit}>
+      <p className="small">{config.message}</p>
+      {config.fields.map((f) => (
+        <input
+          key={f}
+          {...LEAD_INPUT[f]}
+          required
+          maxLength={f === "phone" ? 30 : f === "email" ? 200 : 100}
+          placeholder={LEAD_LABELS[f]}
+          aria-label={LEAD_LABELS[f]}
+          value={values[f] ?? ""}
+          onChange={(e) => setValues((v) => ({ ...v, [f]: e.target.value }))}
+        />
+      ))}
+      {error && <p className="error-text small">{error}</p>}
+      <div className="row-form">
+        <button className="btn" style={{ background: color }} disabled={busy}>
+          {busy ? "Saving…" : onSkip ? "Send" : "Start chat"}
+        </button>
+        {onSkip && (
+          <button type="button" className="link-btn small" onClick={onSkip}>
+            Skip
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
 export default function ChatBox({
   agentId,
   welcome,
   color = "#4f46e5",
   channel = "widget",
   handoffEnabled = false,
+  lead,
 }: {
   agentId: string;
   welcome: string;
@@ -40,6 +99,8 @@ export default function ChatBox({
   channel?: "widget" | "playground";
   /** Show the "Talk to a human" link (website widget only). */
   handoffEnabled?: boolean;
+  /** Ask the visitor for their details (website widget only). */
+  lead?: LeadConfig;
 }) {
   const storageKey = `cb_session_${channel}_${agentId}`;
   const [sessionId, setSessionId] = useState("");
@@ -50,6 +111,11 @@ export default function ChatBox({
   const [contact, setContact] = useState("");
   const [contactState, setContactState] = useState<"idle" | "saving" | "saved">("idle");
   const [notice, setNotice] = useState("");
+  const leadMode = channel === "widget" && lead ? lead.mode : "off";
+  // null until we know (from the server) whether this visitor already left their details.
+  const [leadDone, setLeadDone] = useState<boolean | null>(leadMode === "off" ? true : null);
+  const [leadSkipped, setLeadSkipped] = useState(false);
+  const skipKey = `cb_lead_skip_${agentId}`;
   const endRef = useRef<HTMLDivElement>(null);
   const lastHuman = useRef(0); // highest owner-message id already shown
 
@@ -67,8 +133,10 @@ export default function ChatBox({
     let cancelled = false;
     fetch(`/api/chat/${agentId}/messages?sessionId=${sessionId}&all=1`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((j: { mode: "bot" | "human"; hasContact?: boolean; messages: Remote[] } | null) => {
-        if (cancelled || !j) return;
+      .then((j: { mode: "bot" | "human"; hasContact?: boolean; hasLead?: boolean; messages: Remote[] } | null) => {
+        if (cancelled) return;
+        setLeadDone(!!j?.hasLead || leadMode === "off");
+        if (!j) return;
         if (j.hasContact) setContactState("saved");
         if (j.messages.length) {
           setMessages(
@@ -108,6 +176,25 @@ export default function ChatBox({
     }, 4000);
     return () => clearInterval(t);
   }, [agentId, channel, mode, sessionId]);
+
+  useEffect(() => {
+    try {
+      setLeadSkipped(localStorage.getItem(skipKey) === "1");
+    } catch {
+      /* storage blocked */
+    }
+  }, [skipKey]);
+  function skipLead() {
+    setLeadSkipped(true);
+    try {
+      localStorage.setItem(skipKey, "1");
+    } catch {
+      /* storage blocked */
+    }
+  }
+  const gate = leadMode === "before_chat" && leadDone !== true; // form instead of the message box
+  const askAfterAnswer =
+    leadMode === "after_first_answer" && leadDone === false && !leadSkipped && !busy && messages.some((m) => m.role === "assistant" && m.id !== undefined);
 
   async function talkToHuman() {
     if (!sessionId) return;
@@ -267,17 +354,23 @@ export default function ChatBox({
       )}
       {channel === "widget" && mode === "human" && contactState === "saved" && <p className="ok-text small handoff-contact">Thanks - the team has your details.</p>}
       {notice && <p className="error-text small handoff-contact">{notice}</p>}
-      {channel === "widget" && handoffEnabled && mode === "bot" && (
+      {channel === "widget" && handoffEnabled && mode === "bot" && !gate && (
         <button type="button" className="link-btn talk-human" onClick={talkToHuman}>
           Talk to a human
         </button>
       )}
-      <form className="chat-input" onSubmit={send}>
+      {askAfterAnswer && lead && (
+        <LeadForm agentId={agentId} sessionId={sessionId} config={lead} color={color} onDone={() => setLeadDone(true)} onSkip={skipLead} />
+      )}
+      {gate && lead && leadDone === false && sessionId && (
+        <LeadForm agentId={agentId} sessionId={sessionId} config={lead} color={color} onDone={() => setLeadDone(true)} />
+      )}
+      {!gate && <form className="chat-input" onSubmit={send}>
         <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={mode === "human" ? "Message our team…" : "Type your question…"} maxLength={2000} aria-label="Message" />
         <button type="submit" disabled={busy || !input.trim()} style={{ background: color }}>
           Send
         </button>
-      </form>
+      </form>}
       {channel === "playground" && (
         <button type="button" className="link-btn" onClick={reset}>
           Start a new chat

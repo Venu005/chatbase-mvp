@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { HttpError, clientIp, handle, rateLimit } from "@/lib/http";
 import { getUser } from "@/lib/auth";
+import { q1 } from "@/lib/db";
 import { getLLM } from "@/lib/providers";
 import { loadAgent, prepareAnswer, saveAnswer, usedCitations } from "@/lib/answer";
 import { refundCredit } from "@/lib/usage";
@@ -38,6 +39,11 @@ export const POST = handle<Ctx>(async (req, { params }) => {
   if (!agent) throw new HttpError(404, "Agent not found");
   // The playground skips human handoff, so only the agent's owner (signed in to the dashboard) may use it.
   if (channel === "playground" && (await getUser())?.id !== agent.user_id) throw new HttpError(403, "The playground is only available to the agent's owner");
+
+  // "Details before chatting": the widget shows the form first; refuse messages that skipped it.
+  if (channel === "widget" && agent.lead_mode === "before_chat" && !(await q1("SELECT 1 FROM leads WHERE agent_id = $1 AND session_id = $2", [agentId, sessionId]))) {
+    throw new HttpError(428, "Please share your details before starting the chat.");
+  }
 
   const prepared = await prepareAnswer(agent, sessionId, channel, message); // reserves a credit; refunds itself on error
 

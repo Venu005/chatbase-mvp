@@ -5,6 +5,8 @@ import { HttpError, clientIp, handle, rateLimit } from "@/lib/http";
 import { loadAgent } from "@/lib/answer";
 import { findConversation, startHandoff } from "@/lib/handoff";
 import { notifyOwner } from "@/lib/notify";
+import { parseContact } from "@/lib/leads";
+import { upsertLead } from "@/lib/lead-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +41,9 @@ export const POST = handle<Ctx>(async (req, { params }) => {
     const prior = await q1<{ visitor_contact: string | null }>("SELECT visitor_contact FROM conversations WHERE id = $1", [existing.id]);
     await q("UPDATE conversations SET visitor_contact = $2 WHERE id = $1", [existing.id, contact]);
     if (!prior?.visitor_contact) void notifyOwner(existing.id, { force: true, kind: "contact" }); // only the first time: no mail floods
+    const parsed = parseContact(contact);
+    // The handoff e-mail already tells the owner, so this lead is saved without a second "new lead" e-mail.
+    if (parsed) await upsertLead(agentId, sessionId, "widget", "handoff", parsed).catch((e) => console.error("Saving lead failed:", e));
   }
   return NextResponse.json({ mode: "human", notice, conversationId: existing.id });
 });
