@@ -10,12 +10,18 @@ and regional-language questions, WhatsApp, INR subscriptions, and a human-handof
 - Agents with custom instructions, welcome message and brand colour
 - Knowledge sources: website URL (optionally crawl up to 20 same-site pages), PDF / TXT / MD / CSV upload, pasted text
 - Retrieval-augmented answers with citations, streamed token by token, in the visitor's language
-- Dashboard: sources, playground, settings, embed snippet, conversation inbox
+- Dashboard: sources, Q&A, playground, settings, embed snippet, conversation inbox, leads, analytics
+- **Fix this answer / Q&A**: correct any bot answer from the inbox (or write Q&A pairs); matching questions get your
+  answer from then on, ahead of the sources, in the visitor's language
+- **👍/👎 feedback** on answers in the widget, shown in the inbox and analytics
+- **Analytics**: conversations per day, answer quality, questions your sources couldn't answer (with one-click fixes)
+- **Lead capture**: ask visitors for name / e-mail / phone (before the chat or after the first answer); WhatsApp customers
+  and handoff contacts are saved too; CSV export
 - Embeddable chat bubble (`/widget.js`) and a full-page chat link (`/embed/<agent id>`); optionally limited to the owner's
   own websites, so nobody else can embed the agent and spend its message credits
 - **Pluggable models**: OpenAI or any OpenAI-compatible API, Anthropic, **Sarvam** (Indian languages), or an offline mock
 - **WhatsApp channel**: connect a WhatsApp Business (Cloud API) number by pasting credentials, or with the
-  **Connect with Facebook** button (Embedded Signup)
+  **Connect with Facebook** button (Embedded Signup); **voice notes** are transcribed with Sarvam (Indian languages)
 - **Human handoff**: customers can ask for a person (button in the widget, or by typing it, also in Hindi/Hinglish); the bot
   goes quiet, the owner is e-mailed and replies from the dashboard inbox (also to WhatsApp customers), then hands back
 - **Razorpay billing**: Starter / Growth / Pro monthly INR subscriptions; the plan changes only on Razorpay's signed webhook
@@ -71,8 +77,8 @@ The full variable reference is in [docs/setup.md](docs/setup.md#4-configuration-
 | `pnpm migrate` | apply database migrations (safe to re-run) |
 | `pnpm preflight [--live] [--email you@x.com]` | check `.env` and the database; `--live` also tests AI keys, Razorpay, Meta and SMTP |
 | `pnpm razorpay:setup` | create the monthly INR plans in Razorpay and print the `RAZORPAY_PLAN_*` lines |
-| `pnpm typecheck`, `pnpm test` | TypeScript check; 19 unit tests |
-| `pnpm smoke`, `smoke:account`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | end-to-end tests against fake external services |
+| `pnpm typecheck`, `pnpm test` | TypeScript check; 21 unit tests |
+| `pnpm smoke`, `smoke:account`, `smoke:features`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | end-to-end tests against fake external services |
 
 ## How it works
 

@@ -29,6 +29,7 @@ pnpm start
 
 # terminal 2
 pnpm smoke             # accounts, ingestion, RAG answers, isolation, limits, widget, rate limits
+pnpm smoke:features    # 👍/👎 feedback, Q&A answers, analytics, lead capture and CSV
 pnpm smoke:account     # password reset e-mails and links, allowed websites for the widget
 pnpm smoke:whatsapp    # manual WhatsApp connection, webhook signatures, dedupe, replies, credits
 pnpm smoke:handoff     # human handoff: inbox, replies on the widget and WhatsApp, e-mail alerts, auto-resume
