@@ -19,6 +19,7 @@ pnpm build
 # terminal 1: start the app with the fake-service settings the scripts expect
 SIGNUP_RATE_LIMIT=1000 \
 WHATSAPP_GRAPH_BASE_URL=http://127.0.0.1:4020 \
+SARVAM_API_KEY=sarvam-test-key SARVAM_STT_URL=http://127.0.0.1:4020/speech-to-text \
 SMTP_URL=smtp://127.0.0.1:4025 EMAIL_FROM="Bot <bot@example.com>" \
 RAZORPAY_API_BASE=http://127.0.0.1:4030 RAZORPAY_KEY_ID=rzp_test_fake RAZORPAY_KEY_SECRET=fake_key_secret \
 RAZORPAY_WEBHOOK_SECRET=whsec_test RAZORPAY_PLAN_STARTER=plan_starter0000001 RAZORPAY_PLAN_GROWTH=plan_growth00000001 \

@@ -6,6 +6,7 @@ import { formatForWhatsApp } from "./wa-format";
 import { findConversation, recordVisitorMessage } from "./handoff";
 import { env, envStr } from "./env";
 import { upsertLead } from "./lead-store";
+import { speechToTextConfigured, transcribe } from "./speech";
 
 // ---------------------------------------------------------------------------
 // WhatsApp Cloud API (Meta). Docs: send = POST {graph}/{version}/{phone_number_id}/messages,
@@ -87,13 +88,29 @@ export async function sendText(phoneNumberId: string, token: string, to: string,
   if (!res.ok) throw new Error(`WhatsApp send failed: ${await graphError(res)}`);
 }
 
+const MAX_MEDIA_BYTES = 16 * 1024 * 1024; // WhatsApp's own limit for audio
+
+/** Downloads a customer's media (voice note): look up its short-lived URL, then fetch it with the same token. */
+export async function downloadMedia(mediaId: string, token: string): Promise<{ bytes: Uint8Array<ArrayBuffer>; mimeType: string }> {
+  const meta = await fetch(`${graph()}/${encodeURIComponent(mediaId)}`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) });
+  if (!meta.ok) throw new Error(`WhatsApp media lookup failed: ${await graphError(meta)}`);
+  const j = (await meta.json()) as { url?: string; mime_type?: string; file_size?: number };
+  if (!j.url) throw new Error("WhatsApp media has no URL");
+  if ((j.file_size ?? 0) > MAX_MEDIA_BYTES) throw new Error("Voice note is too large");
+  const res = await fetch(j.url, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20_000) });
+  if (!res.ok) throw new Error(`WhatsApp media download failed: HTTP ${res.status}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.length > MAX_MEDIA_BYTES) throw new Error("Voice note is too large");
+  return { bytes, mimeType: j.mime_type ?? res.headers.get("content-type") ?? "audio/ogg" };
+}
+
 export function verifySignature(rawBody: Buffer, header: string | null, appSecret: string): boolean {
   if (!header?.startsWith("sha256=")) return false;
   return safeEqual(header.slice(7), hmacSha256Hex(appSecret, rawBody));
 }
 
 // ---- inbound payload ---------------------------------------------------------
-export type Incoming = { phoneNumberId: string; from: string; wamid: string; type: string; text: string; name?: string };
+export type Incoming = { phoneNumberId: string; from: string; wamid: string; type: string; text: string; name?: string; mediaId?: string };
 
 /** Pulls user messages out of a webhook payload. Status updates and unknown shapes yield nothing. */
 export function extractIncoming(payload: unknown): Incoming[] {
@@ -118,6 +135,7 @@ export function extractIncoming(payload: unknown): Incoming[] {
           type: String(m.type ?? "unknown"),
           text: m.type === "text" ? String(m.text?.body ?? "") : "",
           name: names.get(m.from),
+          ...(m.type === "audio" && typeof m.audio?.id === "string" ? { mediaId: m.audio.id } : {}),
         });
       }
     }
@@ -137,14 +155,35 @@ export async function processIncoming(ch: Channel, m: Incoming): Promise<void> {
   if (!rateLimit(`wa:${ch.id}:${m.from}`, 10, 60_000)) return; // silently ignore floods
   // Every WhatsApp customer is a lead: their number (and WhatsApp profile name) go to the Leads tab.
   await upsertLead(ch.agent_id, session, "whatsapp", "whatsapp", { phone: `+${m.from}`, name: m.name }).catch((e) => console.error("Saving lead failed:", e));
-  if (m.type !== "text" || !m.text.trim()) {
+  // Voice notes: transcribe them and carry on as if the customer had typed the words (marked with 🎤).
+  let text = m.type === "text" ? m.text : "";
+  let voiceFailed = false;
+  if (m.type === "audio" && m.mediaId && speechToTextConfigured()) {
+    try {
+      const media = await downloadMedia(m.mediaId, token);
+      const t = await transcribe(media.bytes, media.mimeType);
+      if (t.text) text = `🎤 ${t.text}`;
+      else voiceFailed = true;
+    } catch (e) {
+      console.error("Voice note transcription failed:", (e as Error).message);
+      voiceFailed = true;
+    }
+  }
+
+  if (!text.trim()) {
     // If a person is handling this chat, an image/voice note is exactly what they need to know about.
     const convo = await findConversation(ch.agent_id, session);
     if (convo?.mode === "human") {
       await recordVisitorMessage(convo.id, `[The customer sent a ${m.type} message. Media isn't shown here - open WhatsApp on your phone to view it.]`);
       return;
     }
-    await reply("Sorry, I can only read text messages for now. Please type your question.");
+    await reply(
+      voiceFailed
+        ? "Sorry, I couldn't make out that voice note. Please type your question, or send a shorter voice message (under 30 seconds)."
+        : speechToTextConfigured()
+          ? "Sorry, I can only read text and voice messages for now. Please type your question."
+          : "Sorry, I can only read text messages for now. Please type your question."
+    );
     return;
   }
 
@@ -154,7 +193,7 @@ export async function processIncoming(ch: Channel, m: Incoming): Promise<void> {
 
   let parts: string[];
   try {
-    const r = await answerOnce(agent, session, "whatsapp", m.text.slice(0, 2000));
+    const r = await answerOnce(agent, session, "whatsapp", text.slice(0, 2000));
     if ("handedOff" in r) {
       // A person owns this chat: send the "team will reply" notice once (when it starts), then stay silent.
       parts = r.notice ? [r.notice] : [];

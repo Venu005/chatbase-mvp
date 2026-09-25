@@ -66,6 +66,8 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `SARVAM_API_KEY`, `SARVAM_BASE_URL` | base: `https://api.sarvam.ai/v1` | For `LLM_PROVIDER=sarvam`. |
 | `SARVAM_REASONING_EFFORT` | service default | `none` (recommended for support answers), `low`, `medium` or `high`. |
 | `SARVAM_MAX_TOKENS` | `1024` | Maximum length of one answer. |
+| `VOICE_NOTES` | on when `SARVAM_API_KEY` is set | `off` stops transcribing WhatsApp voice notes. |
+| `SARVAM_STT_MODEL`, `SARVAM_STT_URL`, `SARVAM_STT_LANGUAGE` | `saaras:v3`, `https://api.sarvam.ai/speech-to-text`, `unknown` (auto-detect) | Speech-to-text for voice notes. Set the language (e.g. `hi-IN`) only if all your customers speak one language. |
 | `EMBEDDING_PROVIDER` | `mock` | `mock` (development only) or `openai` (any OpenAI-compatible embeddings endpoint). |
 | `EMBEDDING_API_KEY` | `OPENAI_API_KEY` | Key for the embeddings endpoint. |
 | `EMBEDDING_BASE_URL` | `OPENAI_BASE_URL` | Embeddings endpoint base URL. |

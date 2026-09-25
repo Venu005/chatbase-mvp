@@ -30,7 +30,11 @@ The temporary 24-hour token on the API Setup page is fine for a first test; use 
 
 - Text messages get the assistant's answer, formatted for WhatsApp (bold as `*bold*`, no headings, up to two source links).
   Long answers are split into several messages.
-- Images, voice notes and other media get a polite "I can only read text" reply, unless a person is handling the chat
+- **Voice notes** are transcribed with Sarvam speech-to-text (Hindi, English and other Indian languages, detected
+  automatically) when `SARVAM_API_KEY` is set, then answered like typed text. The inbox shows the transcript marked 🎤.
+  Voice notes longer than about 30 seconds, or ones that can't be understood, get a "please type it" reply.
+- Every WhatsApp customer is saved in the **Leads** tab with their number and WhatsApp profile name.
+- Images and other media get a polite "I can only read text" reply, unless a person is handling the chat
   (then the owner sees a note that media arrived, see [handoff.md](handoff.md)).
 - Typing `human`, `agent`, or a phrase like "talk to a person" or "insaan se baat karni hai" hands the chat to the owner.
 - Each sender is limited to 10 messages a minute; extra messages are ignored.

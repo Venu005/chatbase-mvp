@@ -1,6 +1,6 @@
 // End-to-end test of the WhatsApp channel against a RUNNING server, using a local FAKE Meta Graph API.
-// Start the app pointing at the fake, then run this script:
-//   WHATSAPP_GRAPH_BASE_URL=http://127.0.0.1:4020 pnpm start
+// Start the app pointing at the fake (which also fakes Sarvam speech-to-text for voice notes), then run this script:
+//   WHATSAPP_GRAPH_BASE_URL=http://127.0.0.1:4020 SARVAM_API_KEY=sarvam-test-key SARVAM_STT_URL=http://127.0.0.1:4020/speech-to-text pnpm start
 //   pnpm smoke:whatsapp
 // Set DATABASE_URL (pnpm loads .env for you via --env-file-if-exists) to also check secrets are encrypted at rest.
 import http from "node:http";
@@ -19,13 +19,26 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- fake Meta Graph API ------------------------------------------------------
 const sent = [];
+const transcribed = [];
 const graph = http.createServer((req, res) => {
   let body = "";
   req.on("data", (d) => (body += d));
   req.on("end", () => {
     res.setHeader("content-type", "application/json");
+    // Fake Sarvam speech-to-text (multipart upload of the voice note).
+    if (req.method === "POST" && req.url === "/speech-to-text") {
+      if (req.headers["api-subscription-key"] !== "sarvam-test-key") return (res.statusCode = 403), res.end("{}");
+      transcribed.push(body);
+      if (body.includes("TOO-LONG-AUDIO")) return (res.statusCode = 400), res.end(JSON.stringify({ error: { message: "Audio longer than 30 seconds" } }));
+      return res.end(JSON.stringify({ request_id: "r1", transcript: "दुकान कब खुलती है? When is the shop open?", language_code: "hi-IN" }));
+    }
     const authed = req.headers.authorization === `Bearer ${TOKEN}`;
     if (!authed) return (res.statusCode = 401), res.end(JSON.stringify({ error: { message: "Invalid OAuth access token." } }));
+    // Voice notes: media lookup, then download from the (fake) CDN URL with the same token.
+    const media = req.url.match(/^\/v[\d.]+\/(media-[\w-]+)$/);
+    if (media) return res.end(JSON.stringify({ url: `http://127.0.0.1:${GRAPH_PORT}/cdn/${media[1]}`, mime_type: "audio/ogg; codecs=opus", file_size: 1200, id: media[1] }));
+    const cdn = req.url.match(/^\/cdn\/media-([\w-]+)$/);
+    if (cdn) return res.setHeader("content-type", "audio/ogg"), res.end(`OggS-fake-opus-${cdn[1]}`);
     const m = req.url.match(/^\/v[\d.]+\/(\d+)(\/messages)?(\?.*)?$/);
     if (!m) return (res.statusCode = 404), res.end("{}");
     if (req.method === "GET" && !m[2]) return res.end(JSON.stringify({ id: m[1], display_phone_number: "+91 98765 43210", verified_name: "Sharma Kirana" }));
@@ -154,7 +167,7 @@ try {
 
   await deliver(hook, payload(`wamid.${RUN}.BBB1`, "919822222222", { type: "image", image: { id: "img1" } }));
   const img = await waitForReplies("919822222222", 1);
-  assert.match(img[0].text.body, /only read text messages/);
+  assert.match(img[0].text.body, /only read text/);
   ok("non-text messages get a polite fallback");
 
   const n = sent.length;
@@ -164,12 +177,25 @@ try {
   assert.equal(sent.length, n);
   ok("messages for another phone number id, and status-only updates, are ignored");
 
+  // Voice notes: downloaded from WhatsApp, transcribed by Sarvam, then answered like typed text.
+  await deliver(hook, payload(`wamid.${RUN}.VVV1`, "919844444444", { type: "audio", audio: { id: "media-voice1", mime_type: "audio/ogg; codecs=opus", voice: true } }));
+  const voice = await waitForReplies("919844444444", 1);
+  assert.match(voice[0].text.body, /8am to 10pm/, "the transcript is answered from the knowledge base");
+  const upload = transcribed.at(-1);
+  assert.ok(upload.includes("OggS-fake-opus-voice1") && upload.includes("saaras:v3") && upload.includes('name="mode"') && upload.includes("unknown"), upload.slice(0, 400));
+  await deliver(hook, payload(`wamid.${RUN}.VVV2`, "919855555555", { type: "audio", audio: { id: "media-TOO-LONG-AUDIO", voice: true } }));
+  assert.match((await waitForReplies("919855555555", 1))[0].text.body, /couldn't make out that voice note/);
+  ok("voice notes are transcribed (Sarvam) and answered; ones that can't be transcribed get a polite reply");
+
   const usage = (await a.json("/api/me")).data.usage.used;
-  // Two answered questions cost 2 credits; the image fallback, ignored messages and duplicates cost nothing.
-  assert.equal(usage - before, 2, `expected 2 credits used, got ${usage - before}`);
+  // Three answered questions (two typed, one voice note) cost 3 credits; the image fallback, ignored messages and duplicates cost nothing.
+  assert.equal(usage - before, 3, `expected 3 credits used, got ${usage - before}`);
   const convos = (await a.json(`/api/agents/${agentId}/conversations`)).data.conversations;
-  const wa = convos.find((c) => c.channel === "whatsapp");
+  const wa = convos.find((c) => c.contact === "+919811111111");
   assert.ok(wa && wa.message_count === 4, JSON.stringify(convos));
+  const vc = convos.find((c) => c.contact === "+919844444444");
+  const vmsgs = (await a.json(`/api/agents/${agentId}/conversations/${vc.id}`)).data.messages;
+  assert.equal(vmsgs[0].content, "🎤 दुकान कब खुलती है? When is the shop open?", "the owner sees the transcript, marked as a voice note");
   ok("WhatsApp chats use message credits and appear in the dashboard's Chats tab");
 
   const leads = (await a.json(`/api/agents/${agentId}/leads`)).data.leads;
