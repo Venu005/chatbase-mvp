@@ -6,12 +6,13 @@ and regional-language questions, WhatsApp, INR subscriptions, and a human-handof
 
 ## What works today
 
-- Sign up / log in (e-mail + password), per-account data isolation
+- Sign up / log in (e-mail + password), password reset by e-mail (signs out other sessions), per-account data isolation
 - Agents with custom instructions, welcome message and brand colour
 - Knowledge sources: website URL (optionally crawl up to 20 same-site pages), PDF / TXT / MD / CSV upload, pasted text
 - Retrieval-augmented answers with citations, streamed token by token, in the visitor's language
 - Dashboard: sources, playground, settings, embed snippet, conversation inbox
-- Embeddable chat bubble (`/widget.js`) and a full-page chat link (`/embed/<agent id>`)
+- Embeddable chat bubble (`/widget.js`) and a full-page chat link (`/embed/<agent id>`); optionally limited to the owner's
+  own websites, so nobody else can embed the agent and spend its message credits
 - **Pluggable models**: OpenAI or any OpenAI-compatible API, Anthropic, **Sarvam** (Indian languages), or an offline mock
 - **WhatsApp channel**: connect a WhatsApp Business (Cloud API) number by pasting credentials, or with the
   **Connect with Facebook** button (Embedded Signup)
@@ -70,8 +71,8 @@ The full variable reference is in [docs/setup.md](docs/setup.md#4-configuration-
 | `pnpm migrate` | apply database migrations (safe to re-run) |
 | `pnpm preflight [--live] [--email you@x.com]` | check `.env` and the database; `--live` also tests AI keys, Razorpay, Meta and SMTP |
 | `pnpm razorpay:setup` | create the monthly INR plans in Razorpay and print the `RAZORPAY_PLAN_*` lines |
-| `pnpm typecheck`, `pnpm test` | TypeScript check; 16 unit tests |
-| `pnpm smoke`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | end-to-end tests against fake external services |
+| `pnpm typecheck`, `pnpm test` | TypeScript check; 19 unit tests |
+| `pnpm smoke`, `smoke:account`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | end-to-end tests against fake external services |
 
 ## How it works
 

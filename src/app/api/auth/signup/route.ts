@@ -24,6 +24,6 @@ export const POST = handle(async (req) => {
     [email, name, hash]
   );
   if (!user) throw new HttpError(409, "An account with this email already exists");
-  await createSession(user.id);
+  await createSession(user.id, 0);
   return NextResponse.json({ ok: true });
 });

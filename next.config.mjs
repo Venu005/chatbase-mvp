@@ -15,6 +15,9 @@ const nextConfig = {
       { source: "/", headers: noFrame },
       { source: "/login", headers: noFrame },
       { source: "/signup", headers: noFrame },
+      { source: "/forgot-password", headers: noFrame },
+      // The reset token is in the URL: never leak it to other sites through the Referer header.
+      { source: "/reset-password", headers: [...noFrame.filter((h) => h.key !== "Referrer-Policy"), { key: "Referrer-Policy", value: "no-referrer" }] },
       { source: "/dashboard/:path*", headers: noFrame },
     ];
   },

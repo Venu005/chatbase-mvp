@@ -17,6 +17,7 @@
     "smoke": "node scripts/smoke-test.mjs",
     "smoke:whatsapp": "node --env-file-if-exists=.env scripts/smoke-whatsapp.mjs",
     "smoke:handoff": "node --env-file-if-exists=.env scripts/smoke-handoff.mjs",
+    "smoke:account": "node --env-file-if-exists=.env scripts/smoke-account.mjs",
     "smoke:embedded": "node --env-file-if-exists=.env scripts/smoke-embedded.mjs",
     "smoke:sarvam": "node --env-file-if-exists=.env scripts/smoke-sarvam.mjs",
     "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test scripts/unit-tests.mjs",

@@ -131,6 +131,7 @@ label input, label textarea { font-weight: 400; }
 .embed { display: flex; flex-direction: column; height: 100vh; background: var(--surface); }
 .embed-head { color: #fff; padding: 14px 16px; font-weight: 700; }
 .embed .chat { flex: 1; }
+.embed-blocked { margin: auto; padding: 24px; text-align: center; }
 
 /* Billing */
 .plans { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 16px; }

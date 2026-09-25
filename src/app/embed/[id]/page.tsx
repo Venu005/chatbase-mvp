@@ -1,6 +1,8 @@
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import ChatBox from "@/components/ChatBox";
 import { q1 } from "@/lib/db";
+import { embedAllowed } from "@/lib/domains";
 
 export const dynamic = "force-dynamic";
 
@@ -8,11 +10,25 @@ export const dynamic = "force-dynamic";
 export default async function EmbedPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const agent = await q1<{ name: string; welcome_message: string; brand_color: string; handoff_enabled: boolean }>(
-    "SELECT name, welcome_message, brand_color, handoff_enabled FROM agents WHERE id = $1",
+  const agent = await q1<{ name: string; welcome_message: string; brand_color: string; handoff_enabled: boolean; allowed_domains: string[] }>(
+    "SELECT name, welcome_message, brand_color, handoff_enabled, allowed_domains FROM agents WHERE id = $1",
     [id]
   );
   if (!agent) notFound();
+  const h = await headers();
+  const allowed = embedAllowed({
+    allowed: agent.allowed_domains,
+    dest: h.get("sec-fetch-dest"),
+    referer: h.get("referer"),
+    selfHost: h.get("host")?.replace(/:\d+$/, "") ?? null,
+  });
+  if (!allowed) {
+    return (
+      <div className="embed">
+        <p className="muted embed-blocked">This chat isn&apos;t enabled for this website.</p>
+      </div>
+    );
+  }
   return (
     <div className="embed">
       <header className="embed-head" style={{ background: agent.brand_color }}>{agent.name}</header>

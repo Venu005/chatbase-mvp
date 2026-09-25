@@ -12,6 +12,7 @@ export type Agent = {
   handoff_enabled: boolean;
   handoff_message: string;
   notify_email: boolean;
+  allowed_domains: string[];
   created_at: string;
 };
 

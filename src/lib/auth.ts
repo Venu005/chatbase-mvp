@@ -19,8 +19,12 @@ function secret(): Uint8Array {
 export const hashPassword = (pw: string) => bcrypt.hash(pw, 10);
 export const verifyPassword = (pw: string, hash: string) => bcrypt.compare(pw, hash);
 
-export async function createSession(userId: string) {
-  const token = await new SignJWT({})
+/**
+ * `sessionVersion` is users.session_version: it is bumped when the password changes, which ends every
+ * session issued before (a stolen cookie stops working once the owner resets their password).
+ */
+export async function createSession(userId: string, sessionVersion: number) {
+  const token = await new SignJWT({ sv: sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuedAt()
@@ -45,7 +49,10 @@ export async function getUser(): Promise<User | null> {
   try {
     const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"] });
     if (!payload.sub) return null;
-    return await q1<User>("SELECT id, email, name, plan FROM users WHERE id = $1", [payload.sub]);
+    const user = await q1<User & { session_version: number }>("SELECT id, email, name, plan, session_version FROM users WHERE id = $1", [payload.sub]);
+    if (!user || (typeof payload.sv === "number" ? payload.sv : 0) !== user.session_version) return null;
+    const { session_version: _, ...rest } = user;
+    return rest;
   } catch {
     return null;
   }

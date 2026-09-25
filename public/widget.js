@@ -27,6 +27,8 @@
     var frame = document.createElement("iframe");
     frame.title = "Chat";
     frame.setAttribute("loading", "lazy");
+    // The chat page checks which website embeds it (an agent can be limited to its owner's websites).
+    frame.referrerPolicy = "origin";
     frame.style.cssText = "width:100%;height:100%;border:0;";
     frameBox.appendChild(frame);
 
@@ -55,6 +57,9 @@
   // Use the agent's saved brand colour when we can fetch it; fall back to data-color / default.
   fetch(origin + "/api/public/agents/" + encodeURIComponent(agentId))
     .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (cfg) { build((cfg && cfg.brandColor) || color); })
+    .then(function (cfg) {
+      if (cfg && cfg.allowed === false) return; // this website isn't on the agent's allowed list
+      build((cfg && cfg.brandColor) || color);
+    })
     .catch(function () { build(color); });
 })();
