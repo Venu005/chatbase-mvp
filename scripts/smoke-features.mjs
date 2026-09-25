@@ -86,6 +86,42 @@ try {
   assert.equal((await rate(S1, r1.done.messageId, null)).status, 200);
   ok("the owner sees 👎 answers in the inbox; a rating can be cleared");
 
+  // ---- Fix this answer (owner Q&A) -------------------------------------------------------------------
+  const fixRes = await a.json(`/api/agents/${agentId}/fixes`, {
+    method: "POST",
+    body: { question: "How long does delivery take?", answer: "Delivery now takes just 2 days, free of charge.", messageId: r1.done.messageId },
+  });
+  assert.equal(fixRes.status, 201, JSON.stringify(fixRes.data));
+  const fixId = fixRes.data.fix.id;
+  const fixed = await chat(agentId, sid(), "how long does delivery take");
+  assert.ok(fixed.text.includes("2 days, free of charge"), fixed.text);
+  assert.deepEqual(fixed.done.citations, []);
+  const other = await chat(agentId, sid(), "Are returns accepted?");
+  assert.ok(other.text.includes("Returns are accepted within 7 days"), other.text);
+  assert.ok(other.done.citations.length >= 1);
+  ok("a fixed answer wins for the same question (without unrelated citations); other questions still use the sources");
+
+  const marked = (await a.json(`/api/agents/${agentId}/conversations/${convoId}`)).data.messages.find((m) => m.role === "assistant");
+  assert.equal(marked.bot, true);
+  assert.equal(marked.fixed, true);
+  const pg = await chat(agentId, sid(), "How long does delivery take?", { channel: "playground", cookie: a.cookie() });
+  assert.ok(pg.text.includes("2 days"), pg.text);
+  ok("the inbox marks the corrected answer; the playground uses fixes too");
+
+  assert.equal((await a.json(`/api/agents/${agentId}/fixes/${fixId}`, { method: "PATCH", body: { question: "How long does delivery take?", answer: "Delivery takes 1 day in metros." } })).status, 200);
+  assert.ok((await chat(agentId, sid(), "How long does delivery take?")).text.includes("1 day in metros"));
+  assert.equal((await a.json(`/api/agents/${agentId}/fixes/${fixId}`, { method: "DELETE" })).status, 200);
+  assert.ok((await chat(agentId, sid(), "How long does delivery take?")).text.includes("3 to 5 working days"));
+  ok("editing a Q&A answer takes effect at once; deleting it goes back to the sources");
+
+  const b = client();
+  await b.json("/api/auth/signup", { method: "POST", body: { email: `feat-b${Date.now()}@example.com`, password: "password-123" } });
+  assert.equal((await b.json(`/api/agents/${agentId}/fixes`)).status, 404);
+  const bAgent = (await b.json("/api/agents", { method: "POST", body: { name: "B" } })).data.agent.id;
+  assert.equal((await b.json(`/api/agents/${bAgent}/fixes`, { method: "POST", body: { question: "steal?", answer: "x", messageId: r1.done.messageId } })).status, 404);
+  assert.equal((await a.json(`/api/agents/${agentId}/fixes`, { method: "POST", body: { question: "", answer: "" } })).status, 400);
+  ok("Q&A answers are private to the agent's owner and validated");
+
   console.log(`\nAll ${passed} feature checks passed.`);
 } catch (e) {
   console.error("\n✗ FAILED:", e.stack ?? e.message);

@@ -34,6 +34,12 @@ export function mockChat(): LLMProvider {
   return {
     name: "mock",
     async *stream({ system, messages }) {
+      // Owner-written Q&A fixes win, as the real prompt instructs.
+      const verified = system.match(/<verified_answers>\nQ: [^\n]*\nA: ([\s\S]*?)(?=\n\nQ: |\n<\/verified_answers>)/)?.[1];
+      if (verified) {
+        for (const word of `(mock model) ${verified.trim()}`.split(/(\s+)/)) yield word;
+        return;
+      }
       const context = system.match(/<context>\n([\s\S]*?)\n<\/context>/)?.[1] ?? "";
       const first = context.match(/^\[1\][^\n]*\n([\s\S]*?)(?=\n\n\[2\]|$)/);
       const question = messages[messages.length - 1]?.content ?? "";

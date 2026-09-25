@@ -111,6 +111,8 @@ label input, label textarea { font-weight: 400; }
 .bubble.user { color: #fff; border-bottom-right-radius: 4px; }
 .bubble.error { color: var(--danger); }
 .md { white-space: normal; }
+.fix-form { display: flex; flex-direction: column; margin: 8px 0 4px; padding: 10px; border: 1px dashed var(--border); border-radius: 8px; white-space: normal; }
+.fix-form label { display: flex; flex-direction: column; gap: 4px; font-weight: 400; }
 .rate { display: flex; gap: 4px; margin-top: 6px; }
 .rate button { font-size: 13px; line-height: 1; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer; opacity: .55; filter: grayscale(1); }
 .rate button:hover, .rate button[aria-pressed="true"] { opacity: 1; filter: none; }

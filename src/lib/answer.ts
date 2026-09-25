@@ -2,7 +2,7 @@ import { q, q1 } from "./db";
 import { HttpError } from "./http";
 import { getLLM } from "./providers";
 import type { ChatMessage } from "./providers/types";
-import { buildSystemPrompt, retrieve, toCitations, type Citation } from "./rag";
+import { buildSystemPrompt, retrieveKnowledge, toCitations, type Citation } from "./rag";
 import { refundCredit, reserveCredit } from "./usage";
 import { wantsHuman } from "./handoff-intent";
 import { findConversation, recordVisitorMessage, startHandoff } from "./handoff";
@@ -38,6 +38,8 @@ export type Prepared = {
   system: string;
   history: ChatMessage[];
   citations: Citation[];
+  /** An owner Q&A fix matched: then only passages the answer explicitly cites are shown (a fix has no source). */
+  fixMatched: boolean;
   started: number;
 };
 
@@ -88,14 +90,15 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
 
     // Retrieval query = the latest question plus the previous user question, so follow-ups like "and the price?" still work.
     const lastUser = [...prior].reverse().find((m) => m.role === "user")?.content;
-    const chunks = await retrieve(agent.id, lastUser ? `${lastUser}\n${message}` : message);
+    const { chunks, fixes } = await retrieveKnowledge(agent.id, lastUser ? `${lastUser}\n${message}` : message, message);
 
     await q("INSERT INTO messages (conversation_id, role, content) VALUES ($1,'user',$2)", [conversationId, message]);
     return {
       conversationId,
-      system: buildSystemPrompt(agent, chunks, { canHandoff: agent.handoff_enabled && channel !== "playground" }),
+      system: buildSystemPrompt(agent, chunks, { canHandoff: agent.handoff_enabled && channel !== "playground", fixes }),
       history,
       citations: toCitations(chunks),
+      fixMatched: fixes.length > 0,
       started,
     };
   } catch (e) {
@@ -113,10 +116,13 @@ export async function saveAnswer(p: Prepared, answer: string): Promise<number> {
   return Number(row!.id);
 }
 
-/** Citations the model actually used; falls back to everything retrieved if it didn't cite inline. */
-export function usedCitations(answer: string, citations: Citation[]): Citation[] {
-  const used = citations.filter((c) => answer.includes(`[${c.n}]`));
-  return used.length ? used : citations;
+/**
+ * Citations the model actually used. If it didn't cite inline, falls back to everything retrieved, except when an
+ * owner Q&A fix matched (the answer then most likely came from the fix, which has nothing to cite).
+ */
+export function usedCitations(answer: string, p: Pick<Prepared, "citations" | "fixMatched">): Citation[] {
+  const used = p.citations.filter((c) => answer.includes(`[${c.n}]`));
+  return used.length || p.fixMatched ? used : p.citations;
 }
 
 /** Non-streaming answer for channels that send one whole message (WhatsApp). Handles credit refund on failure. */
@@ -137,5 +143,5 @@ export async function answerOnce(
     throw e;
   }
   await saveAnswer(p, text).catch((e) => console.error("Saving reply failed:", e));
-  return { text, citations: usedCitations(text, p.citations) };
+  return { text, citations: usedCitations(text, p) };
 }

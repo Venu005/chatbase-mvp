@@ -30,9 +30,10 @@ type Convo = {
   contact: string | null;
   handoff_reason: string | null;
 };
-type Message = { id: number; role: string; content: string; created_at: string; feedback: 1 | -1 | null };
+type Message = { id: number; role: string; content: string; created_at: string; feedback: 1 | -1 | null; bot: boolean; fixed: boolean };
+type Fix = { id: string; question: string; answer: string; message_id: string | null; updated_at: string };
 
-const TABS = ["Sources", "Playground", "Settings", "Embed", "WhatsApp", "Chats"] as const;
+const TABS = ["Sources", "Q&A", "Playground", "Settings", "Embed", "WhatsApp", "Chats"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function AgentWorkspace({ id }: { id: string }) {
@@ -92,6 +93,7 @@ export default function AgentWorkspace({ id }: { id: string }) {
         ))}
       </nav>
       {tab === "Sources" && <SourcesTab agentId={id} />}
+      {tab === "Q&A" && <QATab agentId={id} />}
       {tab === "Playground" && (
         <div className="card playground">
           <ChatBox key={version} agentId={id} welcome={agent.welcome_message} color={agent.brand_color} channel="playground" />
@@ -555,6 +557,14 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [onlyWaiting, setOnlyWaiting] = useState(false);
+  const [fixing, setFixing] = useState<{ messageId: number; question: string; answer: string } | null>(null);
+
+  function startFix(m: Message) {
+    const msgs = detail?.messages ?? [];
+    const i = msgs.findIndex((x) => x.id === m.id);
+    const question = [...msgs.slice(0, i)].reverse().find((x) => x.role === "user")?.content ?? "";
+    setFixing({ messageId: m.id, question, answer: m.content.replace(/\s*\[\d{1,2}\]/g, "") });
+  }
 
   const loadDetail = useCallback(
     async (cid: string) => {
@@ -576,6 +586,7 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
     if (!open) return;
     setDetail(null);
     setError("");
+    setFixing(null);
     void loadDetail(open);
     const t = setInterval(() => void loadDetail(open), 4000);
     return () => clearInterval(t);
@@ -657,11 +668,28 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
               </div>
               <div className="transcript-scroll">
                 {detail.messages.map((m) => (
-                  <p key={m.id} className={`msg ${m.role}`}>
+                  <div key={m.id} className={`msg ${m.role}`}>
                     <strong>{m.role === "user" ? "Customer" : m.role === "human" ? "You" : "Assistant"}:</strong> {m.content}
                     {m.feedback === 1 && <span className="small muted" title="The visitor found this helpful"> 👍</span>}
                     {m.feedback === -1 && <span className="small error-text" title="The visitor marked this as not helpful"> 👎 not helpful</span>}
-                  </p>
+                    {m.role === "assistant" && m.bot && (m.fixed ? (
+                      <span className="small ok-text"> ✓ Fixed</span>
+                    ) : fixing?.messageId !== m.id && (
+                      <> <button type="button" className="link-btn small" onClick={() => startFix(m)}>Fix this answer</button></>
+                    ))}
+                    {fixing?.messageId === m.id && (
+                      <FixForm
+                        agentId={agentId}
+                        initial={fixing}
+                        hint="Next time a customer asks this (or something that means the same), the assistant gives your answer, in their language."
+                        onCancel={() => setFixing(null)}
+                        onSaved={() => {
+                          setFixing(null);
+                          void loadDetail(open!);
+                        }}
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
               <form className="reply-form" onSubmit={send}>
@@ -677,5 +705,141 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+/** Create (with `initial.messageId` from the inbox, or none) or edit (`fixId`) an owner Q&A answer. */
+function FixForm({
+  agentId,
+  fixId,
+  initial,
+  hint,
+  onSaved,
+  onCancel,
+}: {
+  agentId: string;
+  fixId?: string;
+  initial: { question: string; answer: string; messageId?: number };
+  hint?: string;
+  onSaved: () => void;
+  onCancel?: () => void;
+}) {
+  const [question, setQuestion] = useState(initial.question);
+  const [answer, setAnswer] = useState(initial.answer);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      if (fixId) await api(`/api/agents/${agentId}/fixes/${fixId}`, { method: "PATCH", ...json({ question, answer }) });
+      else await api(`/api/agents/${agentId}/fixes`, { method: "POST", ...json({ question, answer, messageId: initial.messageId }) });
+      if (!fixId) {
+        setQuestion("");
+        setAnswer("");
+      }
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="fix-form stack" onSubmit={save}>
+      <label>
+        Customer question
+        <input value={question} onChange={(e) => setQuestion(e.target.value)} required maxLength={500} placeholder="e.g. Do you deliver on Sundays?" />
+      </label>
+      <label>
+        Correct answer
+        <textarea rows={3} value={answer} onChange={(e) => setAnswer(e.target.value)} required maxLength={4000} placeholder="e.g. Yes, in Bengaluru only, between 10am and 2pm." />
+      </label>
+      {hint && <span className="muted small">{hint}</span>}
+      {error && <span className="error-text">{error}</span>}
+      <span className="row-form">
+        <button className="btn" disabled={busy || question.trim().length < 3 || !answer.trim()}>
+          {busy ? "Saving…" : "Save answer"}
+        </button>
+        {onCancel && (
+          <button type="button" className="btn ghost" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </span>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+function QATab({ agentId }: { agentId: string }) {
+  const [fixes, setFixes] = useState<Fix[] | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      setFixes((await api<{ fixes: Fix[] }>(`/api/agents/${agentId}/fixes`)).fixes);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, [agentId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function remove(id: string) {
+    if (!window.confirm("Delete this answer? The assistant will go back to answering from your sources.")) return;
+    await api(`/api/agents/${agentId}/fixes/${id}`, { method: "DELETE" }).catch((e) => setError(e.message));
+    await load();
+  }
+
+  return (
+    <section>
+      <div className="card stack">
+        <h3>Add a question and answer</h3>
+        <p className="muted">
+          Answers you write here win over everything in your sources. Use them for common questions, and to correct the
+          assistant: in <strong>Chats</strong>, press <em>Fix this answer</em> under any reply.
+        </p>
+        <FixForm agentId={agentId} initial={{ question: "", answer: "" }} onSaved={load} />
+      </div>
+      {error && <p className="error-text">{error}</p>}
+      <ul className="list">
+        {fixes?.length === 0 && <li className="muted">No answers yet.</li>}
+        {fixes?.map((f) => (
+          <li key={f.id} className="card">
+            {editing === f.id ? (
+              <FixForm
+                agentId={agentId}
+                fixId={f.id}
+                initial={f}
+                onCancel={() => setEditing(null)}
+                onSaved={() => {
+                  setEditing(null);
+                  void load();
+                }}
+              />
+            ) : (
+              <div className="source">
+                <div>
+                  <strong>{f.question}</strong>
+                  <div className="msg">{f.answer}</div>
+                  <div className="muted small">
+                    {f.message_id ? "Fixed from a conversation" : "Added by you"} · {new Date(f.updated_at).toLocaleDateString("en-IN")}
+                  </div>
+                </div>
+                <button className="link-btn" onClick={() => setEditing(f.id)}>Edit</button>
+                <button className="link-btn" onClick={() => remove(f.id)}>Delete</button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

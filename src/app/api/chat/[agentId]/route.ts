@@ -68,7 +68,7 @@ export const POST = handle<Ctx>(async (req, { params }) => {
         if (!answer.trim()) throw new Error("The model returned an empty reply");
         saved = true;
         const messageId = await saveAnswer(prepared, answer).catch((e) => (console.error("Saving reply failed:", e), null));
-        controller.enqueue(line({ type: "done", citations: usedCitations(answer, prepared.citations), conversationId: prepared.conversationId, messageId }));
+        controller.enqueue(line({ type: "done", citations: usedCitations(answer, prepared), conversationId: prepared.conversationId, messageId }));
       } catch (e) {
         failed = !answer;
         console.error("Chat generation failed:", e);
