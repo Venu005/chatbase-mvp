@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, json } from "@/lib/client";
 
 /** Create (with `initial.messageId` from the inbox, or none) or edit (`fixId`) an owner Q&A answer. */
@@ -23,6 +23,11 @@ export default function FixForm({
   const [answer, setAnswer] = useState(initial.answer);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const ref = useRef<HTMLFormElement>(null);
+  // Opened under a message in a scrolling transcript: bring the whole form (and its Save button) into view.
+  useEffect(() => {
+    if (initial.messageId !== undefined) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [initial.messageId]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -44,7 +49,7 @@ export default function FixForm({
   }
 
   return (
-    <form className="fix-form stack" onSubmit={save}>
+    <form ref={ref} className="fix-form stack" onSubmit={save}>
       <label>
         Customer question
         <input value={question} onChange={(e) => setQuestion(e.target.value)} required maxLength={500} placeholder="e.g. Do you deliver on Sundays?" />

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, json } from "@/lib/client";
 import ChatBox from "./ChatBox";
 import FixForm from "./FixForm";
+import Markdown from "./Markdown";
 import Analytics from "./Analytics";
 import Leads from "./Leads";
 
@@ -725,7 +726,8 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
               <div className="transcript-scroll">
                 {detail.messages.map((m) => (
                   <div key={m.id} className={`msg ${m.role}`}>
-                    <strong>{m.role === "user" ? "Customer" : m.role === "human" ? "You" : "Assistant"}:</strong> {m.content}
+                    <strong>{m.role === "user" ? "Customer" : m.role === "human" ? "You" : "Assistant"}:</strong>{" "}
+                    {m.role === "assistant" ? <Markdown text={m.content} /> : m.content}
                     {m.feedback === 1 && <span className="small muted" title="The visitor found this helpful"> 👍</span>}
                     {m.feedback === -1 && <span className="small error-text" title="The visitor marked this as not helpful"> 👎 not helpful</span>}
                     {m.role === "assistant" && m.bot && (m.fixed ? (
