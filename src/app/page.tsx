@@ -11,7 +11,7 @@ export default async function Home() {
       <h1>An AI support agent trained on your business</h1>
       <p>
         Add your website, PDFs and FAQs. Get a chat agent that answers customers in their own language, on your website
-        today and on WhatsApp next.
+        and on WhatsApp.
       </p>
       <div className="row-form center">
         <Link className="btn" href="/signup">Get started free</Link>

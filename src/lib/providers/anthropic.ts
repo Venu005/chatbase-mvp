@@ -1,5 +1,6 @@
 import type { LLMProvider, StreamOptions } from "./types";
 import { sseData } from "./sse";
+import { normalizeTurns } from "./turns";
 import { env, envStr } from "../env";
 
 export function anthropicChat(): LLMProvider {
@@ -19,7 +20,7 @@ export function anthropicChat(): LLMProvider {
           "x-api-key": key,
           "anthropic-version": "2023-06-01",
         },
-        body: JSON.stringify({ model, max_tokens: 1024, temperature, stream: true, system, messages }),
+        body: JSON.stringify({ model, max_tokens: 1024, temperature, stream: true, system, messages: normalizeTurns(messages) }),
       });
       if (!res.ok || !res.body) throw new Error(`LLM request failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
       for await (const data of sseData(res.body)) {

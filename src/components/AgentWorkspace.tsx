@@ -166,6 +166,12 @@ function SourcesTab({ agentId }: { agentId: string }) {
     }
   }
 
+  async function retry(sid: string) {
+    setError("");
+    await api(`/api/agents/${agentId}/sources/${sid}`, { method: "POST" }).catch((e) => setError(e.message));
+    await load();
+  }
+
   async function remove(sid: string) {
     if (!window.confirm("Remove this source? The agent will forget it.")) return;
     await api(`/api/agents/${agentId}/sources/${sid}`, { method: "DELETE" }).catch((e) => setError(e.message));
@@ -217,6 +223,9 @@ function SourcesTab({ agentId }: { agentId: string }) {
               </div>
             </div>
             <span className={`badge ${s.status}`}>{s.status}</span>
+            {s.status === "failed" && s.type === "url" && (
+              <button className="link-btn" onClick={() => retry(s.id)}>Retry</button>
+            )}
             <button className="link-btn" onClick={() => remove(s.id)}>Remove</button>
           </li>
         ))}

@@ -22,6 +22,7 @@ function client() {
       if (set.length) cookie = set.map((c) => c.split(";")[0]).join("; ");
       return res;
     },
+    cookie: () => cookie,
     async json(path, opts) {
       const res = await this.req(path, opts);
       return { status: res.status, data: await res.json().catch(() => ({})) };
@@ -29,10 +30,12 @@ function client() {
   };
 }
 
-async function chat(agentId, message, sessionId, ip = "10.0.0.1") {
+// The playground channel needs the owner's session cookie (set once the owner has signed up).
+let ownerCookie = "";
+async function chat(agentId, message, sessionId, ip = "10.0.0.1", cookie = ownerCookie) {
   const res = await fetch(`${BASE}/api/chat/${agentId}`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-forwarded-for": ip },
+    headers: { "content-type": "application/json", "x-forwarded-for": ip, ...(cookie ? { cookie } : {}) },
     body: JSON.stringify({ message, sessionId, channel: "playground" }),
   });
   if (!res.ok) return { status: res.status, error: (await res.json()).error };
@@ -101,6 +104,7 @@ try {
   const me = await a.json("/api/me");
   assert.equal(me.data.user.email, email);
   assert.equal(me.data.usage.limit, 50);
+  ownerCookie = a.cookie();
   ok("signup + session cookie + usage");
   assert.equal((await client().json("/api/auth/login", { method: "POST", body: { email, password: "wrong-password" } })).status, 401);
   ok("wrong password rejected");
@@ -189,7 +193,9 @@ try {
   assert.equal((await b.json(`/api/agents/${agentId}/sources`)).status, 404);
   assert.equal((await b.json(`/api/agents/${agentId}/conversations`)).status, 404);
   assert.equal((await b.json(`/api/agents/${agentId}/sources/${sources[0].id}`, { method: "DELETE" })).status, 404);
-  ok("another account cannot read or modify this agent");
+  assert.equal((await chat(agentId, "hi", "session-aaaaaaaa8", "10.0.0.2", b.cookie())).status, 403);
+  assert.equal((await chat(agentId, "hi", "session-aaaaaaaa8", "10.0.0.2", "")).status, 403);
+  ok("another account cannot read or modify this agent, or use its playground");
 
   // ---- widget surface -----------------------------------------------------------
   const pub = await client().json(`/api/public/agents/${agentId}`);

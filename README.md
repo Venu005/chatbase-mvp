@@ -70,7 +70,7 @@ The full variable reference is in [docs/setup.md](docs/setup.md#4-configuration-
 | `pnpm migrate` | apply database migrations (safe to re-run) |
 | `pnpm preflight [--live] [--email you@x.com]` | check `.env` and the database; `--live` also tests AI keys, Razorpay, Meta and SMTP |
 | `pnpm razorpay:setup` | create the monthly INR plans in Razorpay and print the `RAZORPAY_PLAN_*` lines |
-| `pnpm typecheck`, `pnpm test` | TypeScript check; 13 unit tests |
+| `pnpm typecheck`, `pnpm test` | TypeScript check; 16 unit tests |
 | `pnpm smoke`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | end-to-end tests against fake external services |
 
 ## How it works
