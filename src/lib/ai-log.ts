@@ -68,6 +68,29 @@ function totalCost(answer: number | null, rewrite: Prepared["rewrite"]): number 
 }
 
 /** Records the embedding work of one ingested source (tokens estimated from its size). Never throws. */
+/** Records the vision-model reading (OCR) of a scanned PDF or image. Never throws. */
+export async function recordOcr(o: { agentId: string; model: string; usage: { inputTokens: number; outputTokens: number } | null; ms: number }) {
+  try {
+    const [provider, ...rest] = o.model.split(":");
+    await q(
+      `INSERT INTO ai_calls (user_id, agent_id, kind, provider, model, status, input_tokens, output_tokens, tokens_estimated, cost_usd, total_ms)
+       SELECT a.user_id, a.id, 'ingest', $2, $3, 'ok', $4, $5, $6, $7, $8 FROM agents a WHERE a.id = $1`,
+      [
+        o.agentId,
+        provider,
+        rest.join(":"),
+        o.usage?.inputTokens ?? 0,
+        o.usage?.outputTokens ?? 0,
+        !o.usage,
+        o.usage ? costUsd(priceTable(), provider, rest.join(":"), o.usage.inputTokens, o.usage.outputTokens) : null,
+        o.ms,
+      ]
+    );
+  } catch (e) {
+    console.error("Recording the OCR call failed:", (e as Error).message);
+  }
+}
+
 export async function recordIngest(o: { agentId: string; provider: string; model: string; chars: number; ms: number; status: "ok" | "error"; error?: string }) {
   try {
     const tokens = Math.ceil(o.chars / 4);

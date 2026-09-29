@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { HttpError, handle } from "@/lib/http";
 import { ownAgent } from "@/lib/agents";
 import { enqueueSource } from "@/lib/ingest-queue";
+import { OCR_IMAGE_TYPES, ocrConfigured } from "@/lib/ocr";
 import { MAX_CRAWL_PAGES, assertPublicUrl } from "@/lib/ingest";
 
 export const runtime = "nodejs";
@@ -19,13 +20,14 @@ const MAX_TEXT_CHARS = 500_000;
 export const GET = handle<Ctx>(async (_req, { params }) => {
   const user = await requireUser();
   const agent = await ownAgent(user.id, (await params).id);
+  const acceptsImages = ocrConfigured();
   const sources = await q(
     `SELECT s.id, s.type, s.title, s.url, s.status, s.error, s.char_count, s.chunk_count, s.created_at,
             (s.type = 'url' OR EXISTS (SELECT 1 FROM source_payloads p WHERE p.source_id = s.id AND (p.docs IS NOT NULL OR p.file IS NOT NULL))) AS retryable
        FROM sources s WHERE s.agent_id = $1 ORDER BY s.created_at DESC`,
     [agent.id]
   );
-  return NextResponse.json({ sources });
+  return NextResponse.json({ sources, acceptsImages });
 });
 
 const urlBody = z.object({
@@ -60,7 +62,10 @@ export const POST = handle<Ctx>(async (req, { params }) => {
     if (file.size > MAX_FILE_BYTES) throw new HttpError(400, "File is too large (limit 10 MB)");
     const name = file.name.replace(/[^\w.\- ]+/g, "_").slice(0, 120) || "upload";
     const ext = name.split(".").pop()?.toLowerCase();
-    if (!ext || !["pdf", "txt", "md", "csv"].includes(ext)) throw new HttpError(400, "Supported files: PDF, TXT, MD, CSV");
+    const images = ocrConfigured() ? Object.keys(OCR_IMAGE_TYPES) : [];
+    if (!ext || ![...["pdf", "txt", "md", "csv"], ...images].includes(ext)) {
+      throw new HttpError(400, `Supported files: PDF, TXT, MD, CSV${images.length ? ", JPG, PNG, WEBP" : ""}`);
+    }
     const buf = new Uint8Array(await file.arrayBuffer());
     const src = await newSource(agent.id, "file", name, null);
     await enqueueSource(src.id, { file: buf, fileExt: ext });

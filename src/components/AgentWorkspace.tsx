@@ -144,10 +144,13 @@ function SourcesTab({ agentId }: { agentId: string }) {
   const [pages, setPages] = useState(1);
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
+  const [acceptsImages, setAcceptsImages] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setSources((await api<{ sources: Source[] }>(`/api/agents/${agentId}/sources`)).sources);
+      const r = await api<{ sources: Source[]; acceptsImages: boolean }>(`/api/agents/${agentId}/sources`);
+      setSources(r.sources);
+      setAcceptsImages(r.acceptsImages);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -222,7 +225,14 @@ function SourcesTab({ agentId }: { agentId: string }) {
             </select>
           </div>
         )}
-        {mode === "file" && <input type="file" name="file" accept=".pdf,.txt,.md,.csv" />}
+        {mode === "file" && (
+          <>
+            <input type="file" name="file" accept={`.pdf,.txt,.md,.csv${acceptsImages ? ",.jpg,.jpeg,.png,.webp" : ""}`} />
+            <span className="muted small">
+              PDF, TXT, MD or CSV up to 10 MB{acceptsImages ? ". Scanned PDFs and photos (JPG, PNG) of price lists or menus are read automatically." : "."}
+            </span>
+          </>
+        )}
         {mode === "text" && (
           <>
             <input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title, e.g. Refund policy" maxLength={120} />

@@ -16,6 +16,7 @@ import { dropNearDuplicates, fuse, keywordCoverage, keywordQuery, keywordTerms }
 import { rerank } from "../src/lib/rerank.ts";
 import { questionKey } from "../src/lib/cache-key.ts";
 import { isSmallTalk, route } from "../src/lib/routing.ts";
+import { looksClientRendered, looksScanned } from "../src/lib/content-checks.ts";
 import http from "node:http";
 import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
@@ -423,4 +424,16 @@ test("routing: small talk (English, Hinglish, Hindi) and close Q&A matches go to
   assert.equal(route("Do you deliver on Sunday?", 0.93), "small");
   assert.equal(route("Do you deliver on Sunday?", 0.6), "main");
   assert.equal(route("What is the refund policy?", null), "main");
+});
+
+test("content checks: scanned PDFs and JavaScript app shells are recognised", () => {
+  assert.ok(looksScanned({ text: "", pages: 3 }));
+  assert.ok(looksScanned({ text: "Page 1", pages: 1 }));
+  assert.ok(!looksScanned({ text: "Warranty: every wallet carries a two year warranty against stitching defects.", pages: 1 }), "a short real PDF");
+  assert.ok(!looksScanned({ text: "Refunds are credited within 5 working days. ".repeat(4), pages: 1 }));
+  assert.ok(looksClientRendered('<div id="root"></div><script src="/a.js"></script>', 0));
+  assert.ok(looksClientRendered('<div id="__next"></div><script>1</script>', 12));
+  assert.ok(looksClientRendered("<noscript>Please enable JavaScript</noscript><script></script>", 40));
+  assert.ok(!looksClientRendered("<main>" + "Real text. ".repeat(40) + "</main><script></script>", 440), "plenty of text: fine as is");
+  assert.ok(!looksClientRendered("<p>Short page</p>", 10), "no scripts: not an app shell");
 });

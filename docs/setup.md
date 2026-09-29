@@ -91,6 +91,8 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `EMBEDDING_TIMEOUT_MS`, `EMBEDDING_RETRIES` | `30000`, `3` | Time limit and retries for embedding calls. |
 | `RETRIEVAL_MIN_SCORE` | `0.2` (`0.1` in `.env.example`) | Passages scoring below this similarity are ignored. Tune per embedding model. |
 | `CHUNK_SIZE`, `CHUNK_OVERLAP` | `900`, `120` | Passage size and overlap in characters, for newly indexed sources. Tune with `pnpm eval`. |
+| `OCR_PROVIDER`, `OCR_MODEL`, `OCR_API_KEY`, `OCR_BASE_URL`, `OCR_TIMEOUT_MS` | off | Read scanned PDFs and photos (JPG, PNG, WEBP) of price lists and menus with a vision model: `openai` (any compatible API) or `anthropic`. Enables image uploads. |
+| `PRERENDER_URL`, `PRERENDER_TIMEOUT_MS` | off, `30000` | A rendering service (URL containing `{url}`, returning rendered HTML) for websites that build their pages with JavaScript. Without it such sites fail with a clear message. |
 | `ANSWER_CACHE`, `ANSWER_CACHE_TTL_HOURS` | on, `24` | Reuse the answer to a visitor's first question asked word for word before (not in the playground). Invalidated automatically when sources, Q&A answers, instructions, the prompt or the model change. |
 | `HYBRID_SEARCH` | on | Keyword search next to meaning search, merged by rank (product codes, names, prices, Hindi and Hinglish words). `off` = meaning only. |
 | `KEYWORD_MIN_COVERAGE` | `0.5` | A passage found only by keywords must contain this share of the question's meaningful words. |

@@ -1,6 +1,8 @@
 import { q, q1 } from "./db";
 import { envNum, env } from "./env";
-import { PermanentIngestError, fetchDocs, pdfToText, writeChunks, type Doc } from "./ingest";
+import { PermanentIngestError, fetchDocs, looksScanned, pdfText, writeChunks, type Doc } from "./ingest";
+import { OCR_IMAGE_TYPES, ocr, ocrConfigured } from "./ocr";
+import { recordOcr } from "./ai-log";
 import { normalizeText } from "./chunk";
 import { ProviderError } from "./providers/types";
 
@@ -82,10 +84,44 @@ async function docsFor(job: Job): Promise<Doc[]> {
   if (!p?.file) throw new PermanentIngestError("The original content of this source wasn't kept. Remove it and add it again.");
   const title = (await q1<{ title: string }>("SELECT title FROM sources WHERE id = $1", [job.id]))?.title ?? "upload";
   let text: string;
-  try {
-    text = p.file_ext === "pdf" ? await pdfToText(new Uint8Array(p.file)) : normalizeText(new TextDecoder("utf-8").decode(p.file));
-  } catch (e) {
-    throw new PermanentIngestError(`Couldn't read this file: ${(e as Error).message}`);
+  const bytes = new Uint8Array(p.file);
+  const ext = p.file_ext ?? "";
+  // Scanned PDFs (almost no text layer) and photos are read by a vision model when OCR is set up.
+  const readWithOcr = async (mime: string) => {
+    if (!ocrConfigured()) {
+      throw new PermanentIngestError(
+        ext === "pdf"
+          ? "This PDF looks scanned (it has no text in it). Upload a PDF with selectable text, or paste the text instead."
+          : "Reading images needs OCR, which isn't set up on this server. Paste the text instead."
+      );
+    }
+    const t0 = Date.now();
+    const r = await ocr(bytes, mime, title);
+    await recordOcr({ agentId: job.agent_id, model: r.model, usage: r.usage, ms: Date.now() - t0 });
+    return normalizeText(r.text);
+  };
+  if (ext === "pdf") {
+    let r: { text: string; pages: number };
+    try {
+      r = await pdfText(bytes);
+    } catch (e) {
+      throw new PermanentIngestError(`Couldn't read this file: ${(e as Error).message}`);
+    }
+    if (!looksScanned(r)) text = r.text;
+    else if (!r.text.trim()) text = await readWithOcr("application/pdf");
+    else {
+      // Some text, but very little: try OCR, and keep what the PDF had if OCR isn't available or fails.
+      try {
+        text = ocrConfigured() ? (await readWithOcr("application/pdf")) || r.text : r.text;
+      } catch (e) {
+        console.error("OCR failed, using the PDF's own text:", (e as Error).message);
+        text = r.text;
+      }
+    }
+  } else if (OCR_IMAGE_TYPES[ext]) {
+    text = await readWithOcr(OCR_IMAGE_TYPES[ext]);
+  } else {
+    text = normalizeText(new TextDecoder("utf-8").decode(bytes));
   }
   const docs = [{ title, url: null, text }];
   // Keep the extracted text (for retries and re-indexing), not the file.

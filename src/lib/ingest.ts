@@ -4,7 +4,9 @@ import * as cheerio from "cheerio";
 import { extractText, getDocumentProxy } from "unpdf";
 import { toVector, tx } from "./db";
 import { chunkText, normalizeText } from "./chunk";
-import { envNum } from "./env";
+import { looksClientRendered } from "./content-checks";
+export { looksScanned } from "./content-checks";
+import { env, envNum } from "./env";
 import { embedAll, embeddingModelId, getEmbedder } from "./providers";
 import { recordIngest } from "./ai-log";
 
@@ -125,9 +127,21 @@ export function htmlToDoc(html: string, pageUrl: URL): { doc: Doc; links: string
 }
 
 export async function pdfToText(buf: Uint8Array): Promise<string> {
+  return (await pdfText(buf)).text;
+}
+
+export async function pdfText(buf: Uint8Array): Promise<{ text: string; pages: number }> {
   const pdf = await getDocumentProxy(new Uint8Array(buf));
-  const { text } = await extractText(pdf, { mergePages: true });
-  return normalizeText(Array.isArray(text) ? text.join("\n\n") : text);
+  const { text, totalPages } = await extractText(pdf, { mergePages: true });
+  return { text: normalizeText(Array.isArray(text) ? text.join("\n\n") : text), pages: totalPages };
+}
+
+/** Fetches a page through the rendering service (PRERENDER_URL with {url}), which runs its JavaScript. */
+async function prerender(url: string): Promise<string> {
+  const template = env("PRERENDER_URL")!;
+  const res = await fetch(template.replace("{url}", encodeURIComponent(url)), { signal: AbortSignal.timeout(envNum("PRERENDER_TIMEOUT_MS", 30_000)) });
+  if (!res.ok) throw new Error(`Rendering ${url} failed with HTTP ${res.status}`);
+  return readLimited(res).then((b) => b.toString("utf8"));
 }
 
 export async function fetchDocs(startUrl: string, maxPages: number): Promise<Doc[]> {
@@ -143,7 +157,15 @@ export async function fetchDocs(startUrl: string, maxPages: number): Promise<Doc
       if (contentType.includes("application/pdf")) {
         docs.push({ title: url.pathname.split("/").pop() || url.href, url: url.href, text: await pdfToText(body) });
       } else if (contentType.includes("html")) {
-        const { doc, links } = htmlToDoc(body.toString("utf8"), url);
+        const html = body.toString("utf8");
+        let { doc, links } = htmlToDoc(html, url);
+        if (looksClientRendered(html, doc.text.length)) {
+          if (env("PRERENDER_URL")) ({ doc, links } = htmlToDoc(await prerender(url.href), url));
+          else if (next === startUrl)
+            throw new PermanentIngestError(
+              "This website builds its pages with JavaScript, so its text couldn't be read directly. Upload a PDF or paste the text instead (or ask the platform admin to set up page rendering)."
+            );
+        }
         if (doc.text.length > 30) docs.push(doc);
         for (const l of links) if (!seen.has(l) && seen.size < limit * 10) (seen.add(l), queue.push(l));
       } else if (contentType.startsWith("text/")) {

@@ -3,7 +3,10 @@
 // Start the app with a short first-token timeout and a backup model, then run  pnpm smoke:ai :
 //   LLM_FIRST_TOKEN_TIMEOUT_MS=2000 LLM_FALLBACK_PROVIDER=mock LLM_FALLBACK_MODEL=backup INGEST_RETRY_BASE_MS=1000 \
 //   ADMIN_EMAILS=admin@smoke.test pnpm start
-// Needs DATABASE_URL (from .env) for the crash-recovery check, and ALLOW_PRIVATE_URLS=true for the website check.
+//   LLM_SMALL_PROVIDER=mock LLM_SMALL_MODEL=small OCR_PROVIDER=openai OCR_MODEL=fake-vision OCR_API_KEY=ocr-test \
+//   OCR_BASE_URL=http://127.0.0.1:4060/v1 'PRERENDER_URL=http://127.0.0.1:4060/render?url={url}'
+// (this script runs the fake vision API and rendering service on :4060).
+// Needs DATABASE_URL (from .env) for the crash-recovery check, and ALLOW_PRIVATE_URLS=true for the website checks.
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import http from "node:http";
@@ -16,6 +19,48 @@ const ok = (name) => console.log(`  ✓ ${name}`) || passed++;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const sid = () => crypto.randomBytes(12).toString("hex");
 const RUN = Date.now().toString(36); // fault-injected questions/texts must be new on every run (the mock remembers them)
+
+// ---- fake vision API (OCR) and page-rendering service ---------------------------------------------------
+const ocrCalls = [];
+const fakes = http.createServer((req, res) => {
+  let raw = "";
+  req.on("data", (d) => (raw += d));
+  req.on("end", () => {
+    if (req.url === "/v1/chat/completions") {
+      const body = JSON.parse(raw);
+      ocrCalls.push({ auth: req.headers.authorization, model: body.model, part: body.messages[1].content[0] });
+      res.setHeader("content-type", "application/json");
+      const isPdf = body.messages[1].content[0].type === "file";
+      const text = isPdf ? "Scanned menu\nMasala dosa - ₹80\nFilter coffee - ₹30" : "Photo price list\nGhee 1 litre (code GH-1L) - ₹650";
+      return res.end(JSON.stringify({ choices: [{ message: { content: text } }], usage: { prompt_tokens: 1500, completion_tokens: 40 } }));
+    }
+    if (req.url.startsWith("/render?url=")) {
+      res.setHeader("content-type", "text/html");
+      return res.end("<html><head><title>Rendered shop</title></head><body><main><h1>Our bakery</h1><p>Fresh sourdough bread is baked every morning at 6am and costs 220 rupees a loaf.</p></main></body></html>");
+    }
+    res.statusCode = 404;
+    res.end();
+  });
+});
+await new Promise((r) => fakes.listen(4060, "127.0.0.1", r));
+
+/** A one-page PDF with no text layer (like a scan). */
+function scannedPdf() {
+  const stream = "0 0 0 rg 50 50 100 100 re f";
+  const objs = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+  ];
+  let out = "%PDF-1.4\n";
+  const offs = [];
+  objs.forEach((o, i) => (offs.push(out.length), (out += `${i + 1} 0 obj\n${o}\nendobj\n`)));
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map((o) => String(o).padStart(10, "0") + " 00000 n \n").join("");
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(out, "latin1");
+}
 
 export function client() {
   let cookie = "";
@@ -172,6 +217,39 @@ try {
   assert.ok(exact.text.startsWith("(mock small)") && exact.text.includes("14 days now"), exact.text);
   ok("small talk skips search and isn't a knowledge gap; small talk and close Q&A matches are answered by the small model");
 
+  // ---- Phase 4: scanned PDFs, photos and JavaScript-built websites --------------------------------------
+  const upload = async (name, bytes, type) => {
+    const fd = new FormData();
+    fd.set("file", new Blob([bytes], { type }), name);
+    const res = await fetch(`${BASE}/api/agents/${agentId}/sources`, { method: "POST", headers: { cookie: a.cookie(), "x-forwarded-for": IP }, body: fd });
+    return { status: res.status, data: await res.json() };
+  };
+  const scan = await upload("menu-scan.pdf", scannedPdf(), "application/pdf");
+  assert.equal(scan.status, 202);
+  const photo = await upload("prices.jpg", Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), "image/jpeg");
+  assert.equal(photo.status, 202, JSON.stringify(photo.data));
+  const s1 = await waitFor(scan.data.source.id, (s) => s.status !== "processing");
+  const s2 = await waitFor(photo.data.source.id, (s) => s.status !== "processing");
+  assert.equal(s1.status, "ready", JSON.stringify(s1));
+  assert.equal(s2.status, "ready", JSON.stringify(s2));
+  assert.equal(ocrCalls.length, 2);
+  assert.equal(ocrCalls[0].auth, "Bearer ocr-test");
+  assert.ok(ocrCalls.some((c) => c.part.type === "file" && c.part.file.file_data.startsWith("data:application/pdf;base64,")));
+  assert.ok(ocrCalls.some((c) => c.part.type === "image_url" && c.part.image_url.url.startsWith("data:image/jpeg;base64,")));
+  assert.ok((await chat(agentId, sid(), "masala dosa price")).text.includes("₹80"));
+  assert.ok((await chat(agentId, sid(), "price of GH-1L?")).text.includes("₹650"));
+  ok("scanned PDFs (no text layer) and photos are read by the vision model (OCR) and become searchable");
+
+  const jsSite = http
+    .createServer((_q, res) => (res.setHeader("content-type", "text/html"), res.end('<html><body><div id="root"></div><script src="/app.js"></script></body></html>')))
+    .listen(0);
+  const js = await a.json(`/api/agents/${agentId}/sources`, { method: "POST", body: { type: "url", url: `http://127.0.0.1:${jsSite.address().port}/` } });
+  const jsDone = await waitFor(js.data.source.id, (s) => s.status !== "processing");
+  jsSite.close();
+  assert.equal(jsDone.status, "ready", JSON.stringify(jsDone));
+  assert.ok((await chat(agentId, sid(), "sourdough bread price")).text.includes("220 rupees"));
+  ok("a website that builds its pages with JavaScript is read through the rendering service");
+
   // ---- Admin view ---------------------------------------------------------------------------------------
   assert.equal((await a.json("/api/admin/overview")).status, 404, "non-admins don't see the admin API");
   assert.equal((await a.req("/admin")).status, 404, "or the page");
@@ -240,4 +318,6 @@ try {
 } catch (e) {
   console.error("\n✗ FAILED:", e.stack ?? e.message);
   process.exitCode = 1;
+} finally {
+  fakes.close();
 }
