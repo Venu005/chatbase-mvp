@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "AI support-agent builder (RAG chatbots for your website/WhatsApp) - MVP",
+  "packageManager": "pnpm@12.3.4",
   "engines": {
     "node": ">=22.9",
     "pnpm": ">=10"
