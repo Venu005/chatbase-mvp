@@ -71,6 +71,6 @@ address the business owner signed up with. Without `SMTP_URL` handoff still work
 - There is no "online now" detection: the customer is always told the team will reply when they can. Leave the contact box
   enabled so you can call back.
 - Phrase detection covers English, Hindi and Hinglish. Other languages rely on the website button or on typing `human`. To
-  add phrases, edit `src/lib/handoff-intent.ts` and add cases to `scripts/unit-tests.mjs`.
+  add phrases, edit `packages/core/src/handoff-intent.ts` and add cases to `packages/core/test/unit-tests.mjs`.
 - One owner per agent: no team inbox, assignment or internal notes yet.
 - Dashboard replies are plain text. Media replies and WhatsApp template messages are not supported.

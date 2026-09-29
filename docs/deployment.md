@@ -1,6 +1,8 @@
 # Deploying to a server
 
-A small VM is enough to start (2 vCPU, 2-4 GB RAM) plus a Postgres with pgvector. The app is one long-running Node process.
+A small VM is enough to start (2 vCPU, 2-4 GB RAM) plus a Postgres with pgvector. There are two long-running Node
+processes: the customer app (`apps/web`, which also runs the ingestion worker) and the admin app (`apps/admin`). Both read
+the one `.env` at the repo root.
 
 ## Checklist
 
@@ -8,6 +10,7 @@ A small VM is enough to start (2 vCPU, 2-4 GB RAM) plus a Postgres with pgvector
    database and put its URL in `DATABASE_URL` (add `?sslmode=require` for remote databases).
 2. **Environment**: `cp .env.production.example .env`, fill every `REPLACE_ME`, keep `ALLOW_PRIVATE_URLS=false`, use a real
    embedding model, set `APP_URL` to your public https address, and set both `AUTH_SECRET` and `ENCRYPTION_KEY`.
+   For the admin app set `ADMIN_EMAILS`, a long random `ADMIN_PASSWORD` and `ADMIN_URL` ([admin.md](admin.md)).
    Back up `ENCRYPTION_KEY` somewhere safe.
 3. **Install, migrate, build, check**:
    ```bash
@@ -30,24 +33,49 @@ Description=Chatbase India
 After=network.target
 
 [Service]
-WorkingDirectory=/srv/chatbase-india
-ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -p 3000
+WorkingDirectory=/srv/chatbase-india/apps/web
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000
 Restart=always
 User=chatbase
 Environment=NODE_ENV=production
-# .env in the working directory is read by the app; keep it readable only by this user (chmod 600).
+# /srv/chatbase-india/.env (the repo root) is read by the app; keep it readable only by this user (chmod 600).
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-The service runs `next start` directly (what `pnpm start` runs), so pnpm is not needed at runtime. Change `-p 3000` to use another port.
+```ini
+# /etc/systemd/system/chatbase-india-admin.service
+[Unit]
+Description=Chatbase India admin
+After=network.target
+
+[Service]
+WorkingDirectory=/srv/chatbase-india/apps/admin
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3001
+Restart=always
+User=chatbase
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+The services run `next start` directly (what `pnpm start` runs), so pnpm is not needed at runtime. Change `-p` to use
+other ports.
 
 ## Reverse proxy (Caddy example, automatic HTTPS)
 
 ```
 chat.yourdomain.in {
     reverse_proxy 127.0.0.1:3000
+}
+
+admin.yourdomain.in {
+    # Optional but recommended: only let your office / VPN addresses reach the admin app.
+    # @blocked not remote_ip 203.0.113.0/24
+    # respond @blocked 404
+    reverse_proxy 127.0.0.1:3001
 }
 ```
 
@@ -80,7 +108,7 @@ through your own proxy**, never directly to the internet.
 - `pnpm audit` reports advisories in PostCSS bundled with Next.js 15; they concern processing untrusted CSS, which this app
   never does. Upgrade Next when a fixed release you have tested is available.
 - Consider an HNSW index on `chunks.embedding` only if a single agent will hold very large amounts of content (see the note in
-  `db/migrations/001_init.sql`).
+  `packages/core/db/migrations/001_init.sql`).
 
 ## Upgrading
 

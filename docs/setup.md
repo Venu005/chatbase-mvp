@@ -20,8 +20,11 @@ pnpm install
 cp .env.example .env          # then edit .env: set AUTH_SECRET (see below)
 pnpm migrate                  # creates the tables
 pnpm preflight                   # checks your .env and database
-pnpm dev                      # http://localhost:3000
+pnpm dev                      # customer app http://localhost:3000, admin app http://localhost:3001
 ```
+
+The repo is a Turborepo: `apps/web` (the customer app), `apps/admin` (the admin dashboard) and shared code in
+`packages/`. Keep one `.env` at the repo root; both apps and every script read it.
 
 Generate the two secrets with `openssl rand -base64 48`: put one in `AUTH_SECRET`, and (recommended) another in
 `ENCRYPTION_KEY`. The app rejects the `REPLACE_ME` placeholder as a secret, so sign-up and login fail until you replace it.
@@ -77,7 +80,9 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `RETRIEVAL_TOP_K` | `6` | How many passages are given to the model per question. |
 | `INGEST_CONCURRENCY`, `INGEST_MAX_ATTEMPTS`, `INGEST_RETRY_BASE_MS` | `2`, `3`, `30000` | Ingestion queue: jobs at once per server, attempts for transient failures, first retry delay (doubles each time). |
 | `INGEST_WORKER` | on | `off` stops this server from running ingestion jobs (for example on a web-only instance). |
-| `ADMIN_EMAILS` | none | Comma-separated e-mails that can open the admin view at `/admin` ([admin.md](admin.md)). |
+| `ADMIN_EMAILS` | none | Comma-separated e-mails of the first admins. They sign in to the admin app with `ADMIN_PASSWORD` and can add more admins there ([admin.md](admin.md)). |
+| `ADMIN_PASSWORD` | none | Password for the `ADMIN_EMAILS` admins, 12+ characters (`openssl rand -base64 24`). Blank turns that sign-in off. |
+| `ADMIN_URL` | none | Public address of the admin app, e.g. `https://admin.yourdomain.in`. Starting with `https://` turns on secure admin cookies. |
 | `LLM_PRICES` | none | USD per million input/output tokens by model id, e.g. `gpt-4.1-mini=0.40/1.60, claude-haiku-4-5=1/5`. Used for cost tracking; models without a price show tokens only. |
 | `EMBEDDING_PRICE_PER_MTOK` | none | USD per million embedded tokens. |
 | `USD_INR_RATE` | none | Also show costs in rupees in the admin view. |
@@ -144,12 +149,13 @@ and `RAZORPAY_API_BASE`. Never set them in production.
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` / `pnpm build` / `pnpm start` | Development server / production build / production server |
+| `pnpm dev` / `pnpm build` / `pnpm start` | Development servers / production build / production servers, for both apps (ports 3000 and 3001). `pnpm dev:web` or `pnpm dev:admin` runs one. |
 | `pnpm migrate` | Applies database migrations (safe to re-run) |
 | `pnpm preflight [--live] [--email you@x.com]` | Checks `.env` and the database; `--live` also tests the external services |
 | `pnpm razorpay:setup` | Creates the monthly INR plans in Razorpay and prints the `RAZORPAY_PLAN_*` lines |
 | `pnpm typecheck` | TypeScript check |
 | `pnpm test` | Unit tests (chunking, encryption, message formatting, handoff phrases, provider helpers) |
+| `pnpm smoke:admin` | Admin sign-in, adding and removing admins, password changes (needs both apps running) |
 | `pnpm smoke`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | End-to-end tests against fake external services. See [testing.md](testing.md). |
 
 ## 6. Upgrading

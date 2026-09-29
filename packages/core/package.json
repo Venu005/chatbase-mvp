@@ -1,0 +1,37 @@
+{
+  "name": "@chatbase/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared server code for the web and admin apps: database, auth, AI providers, ingestion, billing. Also owns the migrations.",
+  "type": "module",
+  "exports": {
+    "./providers": "./src/providers/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "migrate": "node --env-file-if-exists=../../.env scripts/migrate.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test test/unit-tests.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cheerio": "^1.2.0",
+    "jose": "^6.2.12",
+    "nodemailer": "^10.0.10",
+    "pg": "^8.23.0",
+    "unpdf": "^1.8.1",
+    "zod": "^4.6.5"
+  },
+  "peerDependencies": {
+    "next": "^15.5.25"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "next": "^15.5.25",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^5.9.3"
+  }
+}

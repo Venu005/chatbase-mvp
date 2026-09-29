@@ -5,7 +5,7 @@ has enabled). Billing is optional: with the Razorpay variables blank the app run
 
 ## Plans
 
-Defined in `src/lib/plans.ts`. The prices and limits are placeholders, tune them to your costs (AI usage, Meta charges).
+Defined in `packages/core/src/plans.ts`. The prices and limits are placeholders, tune them to your costs (AI usage, Meta charges).
 
 | Plan | Price | Message credits / month | Agents |
 | --- | --- | --- | --- |
@@ -26,7 +26,7 @@ invoicing are **not** handled (see "Not built" below).
    RAZORPAY_KEY_SECRET=...
    ```
    Subscriptions/recurring payments must be enabled on your Razorpay account (Razorpay may need to activate it).
-2. **Create the plans.** This creates one monthly INR plan per paid tier from `src/lib/plans.ts` and is safe to re-run:
+2. **Create the plans.** This creates one monthly INR plan per paid tier from `packages/core/src/plans.ts` and is safe to re-run:
    ```bash
    pnpm razorpay:setup
    ```
