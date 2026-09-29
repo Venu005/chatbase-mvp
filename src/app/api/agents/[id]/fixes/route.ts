@@ -4,7 +4,7 @@ import { q, q1, toVector } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { HttpError, handle } from "@/lib/http";
 import { ownAgent } from "@/lib/agents";
-import { getEmbedder } from "@/lib/providers";
+import { embeddingModelId, getEmbedder } from "@/lib/providers";
 import { MAX_FIXES, fixBody } from "@/lib/fixes";
 
 export const runtime = "nodejs";
@@ -40,9 +40,9 @@ export const POST = handle<Ctx>(async (req, { params }) => {
   }
   const [vec] = await getEmbedder().embed([b.question]);
   const fix = await q1(
-    `INSERT INTO answer_fixes (agent_id, question, answer, embedding, message_id) VALUES ($1,$2,$3,$4::vector,$5)
+    `INSERT INTO answer_fixes (agent_id, question, answer, embedding, message_id, embedding_model) VALUES ($1,$2,$3,$4::vector,$5,$6)
      RETURNING id, question, answer, message_id, created_at, updated_at`,
-    [agent.id, b.question, b.answer, toVector(vec), b.messageId ?? null]
+    [agent.id, b.question, b.answer, toVector(vec), b.messageId ?? null, embeddingModelId()]
   );
   return NextResponse.json({ fix }, { status: 201 });
 });

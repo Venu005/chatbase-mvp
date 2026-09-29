@@ -29,3 +29,20 @@ export async function q1<T = any>(text: string, params: unknown[] = []): Promise
 export function toVector(v: number[]): string {
   return `[${v.join(",")}]`;
 }
+
+/** Runs `fn` in one transaction on a single connection (COMMIT on success, ROLLBACK on error). */
+export async function tx<T>(fn: (query: <R = any>(text: string, params?: unknown[]) => Promise<R[]>) => Promise<T>): Promise<T> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const out = await fn(async (text, params = []) => (await client.query(text, params as any[])).rows);
+    await client.query("COMMIT");
+    return out;
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}

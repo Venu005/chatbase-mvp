@@ -3,9 +3,9 @@ import { z } from "zod";
 import { q, q1 } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { HttpError, handle } from "@/lib/http";
-import { failStaleSources, ingestInBackground, ownAgent } from "@/lib/agents";
-import { MAX_CRAWL_PAGES, assertPublicUrl, fetchDocs, pdfToText } from "@/lib/ingest";
-import { normalizeText } from "@/lib/chunk";
+import { ownAgent } from "@/lib/agents";
+import { enqueueSource } from "@/lib/ingest-queue";
+import { MAX_CRAWL_PAGES, assertPublicUrl } from "@/lib/ingest";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,10 +19,10 @@ const MAX_TEXT_CHARS = 500_000;
 export const GET = handle<Ctx>(async (_req, { params }) => {
   const user = await requireUser();
   const agent = await ownAgent(user.id, (await params).id);
-  await failStaleSources(agent.id);
   const sources = await q(
-    `SELECT id, type, title, url, status, error, char_count, chunk_count, created_at
-       FROM sources WHERE agent_id = $1 ORDER BY created_at DESC`,
+    `SELECT s.id, s.type, s.title, s.url, s.status, s.error, s.char_count, s.chunk_count, s.created_at,
+            (s.type = 'url' OR EXISTS (SELECT 1 FROM source_payloads p WHERE p.source_id = s.id AND (p.docs IS NOT NULL OR p.file IS NOT NULL))) AS retryable
+       FROM sources s WHERE s.agent_id = $1 ORDER BY s.created_at DESC`,
     [agent.id]
   );
   return NextResponse.json({ sources });
@@ -63,10 +63,7 @@ export const POST = handle<Ctx>(async (req, { params }) => {
     if (!ext || !["pdf", "txt", "md", "csv"].includes(ext)) throw new HttpError(400, "Supported files: PDF, TXT, MD, CSV");
     const buf = new Uint8Array(await file.arrayBuffer());
     const src = await newSource(agent.id, "file", name, null);
-    ingestInBackground(src.id, agent.id, async () => {
-      const text = ext === "pdf" ? await pdfToText(buf) : normalizeText(new TextDecoder("utf-8").decode(buf));
-      return [{ title: name, url: null, text }];
-    });
+    await enqueueSource(src.id, { file: buf, fileExt: ext });
     return NextResponse.json({ source: { id: src.id, status: "processing" } }, { status: 202 });
   }
 
@@ -82,13 +79,13 @@ export const POST = handle<Ctx>(async (req, { params }) => {
       throw new HttpError(400, (e as Error).message);
     }
     const src = await newSource(agent.id, "url", url.hostname + (url.pathname === "/" ? "" : url.pathname), url.href, b.crawlPages);
-    ingestInBackground(src.id, agent.id, () => fetchDocs(url.href, b.crawlPages));
+    await enqueueSource(src.id, null);
     return NextResponse.json({ source: { id: src.id, status: "processing" } }, { status: 202 });
   }
 
   // --- Pasted text / FAQ ---------------------------------------------------------
   const b = textBody.parse(body);
   const src = await newSource(agent.id, "text", b.title, null);
-  ingestInBackground(src.id, agent.id, async () => [{ title: b.title, url: null, text: b.text }]);
+  await enqueueSource(src.id, { docs: [{ title: b.title, url: null, text: b.text }] });
   return NextResponse.json({ source: { id: src.id, status: "processing" } }, { status: 202 });
 });

@@ -2,9 +2,9 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import * as cheerio from "cheerio";
 import { extractText, getDocumentProxy } from "unpdf";
-import { q, toVector } from "./db";
+import { toVector, tx } from "./db";
 import { chunkText, normalizeText } from "./chunk";
-import { embedAll, getEmbedder } from "./providers";
+import { embedAll, embeddingModelId, getEmbedder } from "./providers";
 import { recordIngest } from "./ai-log";
 
 export type Doc = { title: string; url: string | null; text: string };
@@ -160,45 +160,53 @@ export async function fetchDocs(startUrl: string, maxPages: number): Promise<Doc
 }
 
 // ---------------------------------------------------------------------------
-// Chunk -> embed -> store. Updates the source row to ready / failed.
+// Chunk -> embed -> store (one transaction, so a retried job never leaves duplicates or half a source).
+// Throws on failure; the ingestion queue decides whether to retry.
 // ---------------------------------------------------------------------------
-export async function indexDocs(sourceId: string, agentId: string, docs: Doc[]): Promise<void> {
+export async function writeChunks(sourceId: string, agentId: string, docs: Doc[]): Promise<{ chars: number; chunks: number }> {
+  const pieces: { title: string; url: string | null; content: string }[] = [];
+  let chars = 0;
+  for (const d of docs) {
+    chars += d.text.length;
+    for (const content of chunkText(d.text)) pieces.push({ title: d.title, url: d.url, content });
+  }
+  if (!pieces.length) throw new PermanentIngestError("No readable text found in this source");
+  if (pieces.length > 5000) throw new PermanentIngestError("Source is too large (more than 5,000 chunks)");
+
+  const embedder = getEmbedder();
+  const model = embeddingModelId();
+  const embedChars = pieces.reduce((n, p) => n + p.content.length, 0);
+  const t0 = Date.now();
+  let vectors: number[][];
   try {
-    const pieces: { title: string; url: string | null; content: string }[] = [];
-    let chars = 0;
-    for (const d of docs) {
-      chars += d.text.length;
-      for (const content of chunkText(d.text)) pieces.push({ title: d.title, url: d.url, content });
-    }
-    if (!pieces.length) throw new Error("No readable text found in this source");
-    if (pieces.length > 5000) throw new Error("Source is too large (more than 5,000 chunks)");
+    vectors = await embedAll(pieces.map((p) => p.content));
+  } catch (e) {
+    await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "error", error: (e as Error).message });
+    throw e;
+  }
+  await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "ok" });
 
-    const embedder = getEmbedder();
-    const embedChars = pieces.reduce((n, p) => n + p.content.length, 0);
-    const t0 = Date.now();
-    let vectors: number[][];
-    try {
-      vectors = await embedAll(pieces.map((p) => p.content));
-    } catch (e) {
-      await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "error", error: (e as Error).message });
-      throw e;
-    }
-    await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "ok" });
-
+  await tx(async (query) => {
+    await query("DELETE FROM chunks WHERE source_id = $1", [sourceId]);
     const BATCH = 100;
     for (let i = 0; i < pieces.length; i += BATCH) {
       const slice = pieces.slice(i, i + BATCH);
       const params: unknown[] = [];
       const values = slice.map((p, j) => {
-        const o = j * 6;
-        params.push(sourceId, agentId, p.title, p.url, p.content, toVector(vectors[i + j]));
-        return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6}::vector)`;
+        const o = j * 7;
+        params.push(sourceId, agentId, p.title, p.url, p.content, toVector(vectors[i + j]), model);
+        return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6}::vector,$${o + 7})`;
       });
-      await q(`INSERT INTO chunks (source_id, agent_id, page_title, page_url, content, embedding) VALUES ${values.join(",")}`, params);
+      await query(`INSERT INTO chunks (source_id, agent_id, page_title, page_url, content, embedding, embedding_model) VALUES ${values.join(",")}`, params);
     }
-    await q("UPDATE sources SET status='ready', error=NULL, char_count=$2, chunk_count=$3, updated_at=now() WHERE id=$1", [sourceId, chars, pieces.length]);
-  } catch (e) {
-    await q("DELETE FROM chunks WHERE source_id=$1", [sourceId]).catch(() => {});
-    await q("UPDATE sources SET status='failed', error=$2, updated_at=now() WHERE id=$1", [sourceId, String((e as Error).message).slice(0, 500)]).catch(() => {});
+  });
+  return { chars, chunks: pieces.length };
+}
+
+/** An ingestion failure that retrying can't fix (a 404 page, an empty file...). */
+export class PermanentIngestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermanentIngestError";
   }
 }

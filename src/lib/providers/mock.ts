@@ -26,8 +26,25 @@ export function mockEmbedText(text: string, dim: number): number[] {
   return v.map((x) => x / norm);
 }
 
+// Fault injection for tests: a text containing [[mock:embed-fail-N]] makes the first N embedding calls for it fail (503).
+const embedFailures = new Map<string, number>();
+
 export function mockEmbeddings(dim: number): EmbeddingProvider {
-  return { name: "mock", model: "mock-embed", dim, embed: async (texts) => texts.map((t) => mockEmbedText(t, dim)) };
+  return {
+    name: "mock",
+    model: "mock-embed",
+    dim,
+    embed: async (texts) => {
+      for (const t of texts) {
+        const m = t.match(/\[\[mock:embed-fail-(\d+)\]\]/);
+        if (m && (embedFailures.get(m[0]) ?? 0) < Number(m[1])) {
+          embedFailures.set(m[0], (embedFailures.get(m[0]) ?? 0) + 1);
+          throw new ProviderError("Mock embedding failure", 503);
+        }
+      }
+      return texts.map((t) => mockEmbedText(t, dim));
+    },
+  };
 }
 
 const sleep = (ms: number, signal?: AbortSignal) =>

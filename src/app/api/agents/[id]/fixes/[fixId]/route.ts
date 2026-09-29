@@ -3,7 +3,7 @@ import { q, q1, toVector } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { HttpError, handle } from "@/lib/http";
 import { ownAgent } from "@/lib/agents";
-import { getEmbedder } from "@/lib/providers";
+import { embeddingModelId, getEmbedder } from "@/lib/providers";
 import { fixBody } from "@/lib/fixes";
 
 export const runtime = "nodejs";
@@ -26,9 +26,10 @@ export const PATCH = handle<Ctx>(async (req, { params }) => {
   // Re-embed only when the question changed (that's what visitor questions are matched against).
   const vec = b.question === fix.question ? null : (await getEmbedder().embed([b.question]))[0];
   const row = await q1(
-    `UPDATE answer_fixes SET question = $2, answer = $3, embedding = COALESCE($4::vector, embedding), updated_at = now()
+    `UPDATE answer_fixes SET question = $2, answer = $3, embedding = COALESCE($4::vector, embedding),
+            embedding_model = CASE WHEN $4::vector IS NULL THEN embedding_model ELSE $5 END, updated_at = now()
       WHERE id = $1 RETURNING id, question, answer, message_id, created_at, updated_at`,
-    [fix.id, b.question, b.answer, vec ? toVector(vec) : null]
+    [fix.id, b.question, b.answer, vec ? toVector(vec) : null, embeddingModelId()]
   );
   return NextResponse.json({ fix: row });
 });

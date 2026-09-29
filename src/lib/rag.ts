@@ -1,5 +1,5 @@
 import { q, toVector } from "./db";
-import { getEmbedder } from "./providers";
+import { embeddingModelId, getEmbedder } from "./providers";
 import { envNum } from "./env";
 
 export type Retrieved = {
@@ -34,9 +34,9 @@ async function searchFixes(agentId: string, vec: number[]): Promise<FixMatch[]> 
   const minScore = envNum("ANSWER_FIX_MIN_SCORE", 0.5);
   const rows = await q<FixMatch>(
     `SELECT id, question, answer, 1 - (embedding <=> $2::vector) AS score
-       FROM answer_fixes WHERE agent_id = $1
+       FROM answer_fixes WHERE agent_id = $1 AND (embedding_model IS NULL OR embedding_model = $3)
       ORDER BY embedding <=> $2::vector LIMIT 3`,
-    [agentId, toVector(vec)]
+    [agentId, toVector(vec), embeddingModelId()]
   );
   return rows.filter((r) => r.score >= minScore);
 }
@@ -49,9 +49,10 @@ async function searchChunks(agentId: string, vec: number[]): Promise<Retrieved[]
             1 - (c.embedding <=> $2::vector) AS score
        FROM chunks c JOIN sources s ON s.id = c.source_id
       WHERE c.agent_id = $1 AND s.status = 'ready'
+        AND (c.embedding_model IS NULL OR c.embedding_model = $4) -- vectors from another model can't be compared
       ORDER BY c.embedding <=> $2::vector
       LIMIT $3`,
-    [agentId, toVector(vec), k]
+    [agentId, toVector(vec), k, embeddingModelId()]
   );
   return rows.filter((r) => r.score >= minScore);
 }
