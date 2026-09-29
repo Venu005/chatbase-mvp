@@ -130,7 +130,8 @@ try {
   // Upstream failure: friendly error, credit refunded
   mode = "fail";
   const before = await used();
-  const bad = await chat(agentId, sid(), "When is the shop open?");
+  // A question not asked before (a repeated first question would be served from the answer cache, not Sarvam).
+  const bad = await chat(agentId, sid(), "When is the shop open on holidays?");
   assert.ok(bad.error && !bad.error.message.includes("exploded"), "internal error details must not leak to visitors");
   assert.equal(bad.answer, "");
   assert.equal(await used(), before, "the credit is refunded when the model call fails");

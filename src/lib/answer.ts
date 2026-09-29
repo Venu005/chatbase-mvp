@@ -5,6 +5,8 @@ import { newRun, resilientStream, type Run } from "./providers/resilient";
 import { trimHistory } from "./providers/turns";
 import { recordAnswer } from "./ai-log";
 import { queryRewriteEnabled, rewriteFollowUp } from "./query-rewrite";
+import { questionKey } from "./cache-key";
+import { env } from "./env";
 import type { Usage } from "./providers/types";
 import { envNum } from "./env";
 import type { ChatMessage } from "./providers/types";
@@ -27,6 +29,7 @@ export type AnswerAgent = {
   handoff_enabled: boolean;
   handoff_message: string;
   lead_mode: "off" | "after_first_answer" | "before_chat";
+  knowledge_version: string;
 };
 export type Channel = "widget" | "playground" | "whatsapp";
 
@@ -34,7 +37,7 @@ const HISTORY_TURNS = 10;
 
 export async function loadAgent(agentId: string): Promise<AnswerAgent | null> {
   return q1<AnswerAgent>(
-    `SELECT a.id, a.user_id, a.name, a.instructions, a.handoff_enabled, a.handoff_message, a.lead_mode, u.plan
+    `SELECT a.id, a.user_id, a.name, a.instructions, a.handoff_enabled, a.handoff_message, a.lead_mode, a.knowledge_version, u.plan
        FROM agents a JOIN users u ON u.id = a.user_id WHERE a.id = $1`,
     [agentId]
   );
@@ -58,6 +61,12 @@ export type Prepared = {
   citations: Citation[];
   /** An owner Q&A fix matched: then only passages the answer explicitly cites are shown (a fix has no source). */
   fixMatched: boolean;
+  /** Nothing in the sources or Q&A answers matched (shown as a knowledge gap in Analytics). */
+  knowledgeGap: boolean;
+  /** Answer-cache key when this answer may be cached or served from the cache (first questions only). */
+  cache: { key: string; knowledgeVersion: string; model: string } | null;
+  /** Set when the answer comes from the cache: no search and no model call were needed. */
+  cached: { answer: string } | null;
   started: number;
 };
 
@@ -106,6 +115,45 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
     );
     const history: ChatMessage[] = [...trimHistory(prior, envNum("HISTORY_MAX_CHARS", 6000)), { role: "user", content: message }];
 
+    // Answer cache: a visitor's first question, asked word for word before, gets the stored answer if nothing that
+    // shapes answers (sources, Q&A, instructions, prompt, model) has changed since. The owner's playground always
+    // gets a fresh answer.
+    const primary = getLLM();
+    const key = channel !== "playground" && answerCacheEnabled() && !prior.some((m) => m.role === "user") ? questionKey(message) : null;
+    const cache = key ? { key, knowledgeVersion: agent.knowledge_version, model: `${primary.name}:${primary.model}` } : null;
+    if (cache) {
+      const hit = await q1<{ answer: string; citations: Citation[]; knowledge_gap: boolean }>(
+        `UPDATE answer_cache SET hits = hits + 1
+          WHERE agent_id = $1 AND question_key = $2 AND knowledge_version = $3 AND prompt_version = $4 AND model = $5
+            AND created_at > now() - ($6 || ' hours')::interval
+          RETURNING answer, citations, knowledge_gap`,
+        [agent.id, cache.key, cache.knowledgeVersion, PROMPT_VERSION, cache.model, String(envNum("ANSWER_CACHE_TTL_HOURS", 24))]
+      );
+      if (hit) {
+        await q("INSERT INTO messages (conversation_id, role, content) VALUES ($1,'user',$2)", [conversationId, message]);
+        return {
+          conversationId,
+          agentId: agent.id,
+          userId: agent.user_id,
+          channel,
+          question: message,
+          searchQuery: message,
+          rewrite: null,
+          promptVersion: PROMPT_VERSION,
+          retrieved: [],
+          fixes: [],
+          system: "",
+          history,
+          citations: hit.citations,
+          fixMatched: false,
+          knowledgeGap: hit.knowledge_gap,
+          cache,
+          cached: { answer: hit.answer },
+          started,
+        };
+      }
+    }
+
     // Retrieval query = the latest question plus the previous user question, so follow-ups like "and the price?" still work.
     const lastUser = [...prior].reverse().find((m) => m.role === "user")?.content;
     // Follow-ups ("and the 10 kg one?") need the earlier question to be searchable: rewritten by a small model when
@@ -130,6 +178,9 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
       history,
       citations: toCitations(chunks),
       fixMatched: fixes.length > 0,
+      knowledgeGap: !chunks.length && !fixes.length,
+      cache,
+      cached: null,
       started,
     };
   } catch (e) {
@@ -139,15 +190,38 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
 }
 
 /** Stores the bot's reply; returns its message id (the widget uses it for 👍/👎 feedback). */
-/** Streams the bot's reply through the production wrapper (timeouts, retries, backup model). */
+export const answerCacheEnabled = () => env("ANSWER_CACHE")?.toLowerCase() !== "off";
+
+/** Streams the bot's reply through the production wrapper (timeouts, retries, backup model), or from the cache. */
 export function streamAnswer(p: Prepared, run: Run, signal?: AbortSignal): AsyncGenerator<string> {
+  if (p.cached) return streamCached(p, run);
   return resilientStream({ system: p.system, messages: p.history, signal }, getLLM(), getFallbackLLM(), run);
+}
+
+async function* streamCached(p: Prepared, run: Run): AsyncGenerator<string> {
+  Object.assign(run, { provider: "cache", model: p.cache!.model, attempts: 1, usage: { inputTokens: 0, outputTokens: 0 } });
+  run.firstTokenMs = Date.now() - p.started;
+  // Sent in word groups so the widget renders it the same way as a live answer.
+  for (const part of p.cached!.answer.match(/\S+\s*/g) ?? [p.cached!.answer]) yield part;
+}
+
+/** Stores a fresh first answer for reuse (only answers from the main model, not the backup). Never throws. */
+export async function cacheAnswer(p: Prepared, run: Run, answer: string): Promise<void> {
+  if (!p.cache || p.cached || run.fallbackUsed || !answer.trim()) return;
+  await q(
+    `INSERT INTO answer_cache (agent_id, question_key, knowledge_version, prompt_version, model, answer, citations, knowledge_gap)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (agent_id, question_key) DO UPDATE SET knowledge_version = EXCLUDED.knowledge_version, prompt_version = EXCLUDED.prompt_version,
+       model = EXCLUDED.model, answer = EXCLUDED.answer, citations = EXCLUDED.citations, knowledge_gap = EXCLUDED.knowledge_gap,
+       hits = 0, created_at = now()`,
+    [p.agentId, p.cache.key, p.cache.knowledgeVersion, p.promptVersion, p.cache.model, answer, JSON.stringify(p.citations), p.knowledgeGap]
+  ).catch((e) => console.error("Caching the answer failed:", (e as Error).message));
 }
 
 export async function saveAnswer(p: Prepared, answer: string): Promise<number> {
   const row = await q1<{ id: string }>(
     "INSERT INTO messages (conversation_id, role, content, citations, latency_ms, knowledge_gap) VALUES ($1,'assistant',$2,$3,$4,$5) RETURNING id",
-    [p.conversationId, answer, JSON.stringify(p.citations), Date.now() - p.started, !p.citations.length && !p.fixMatched]
+    [p.conversationId, answer, JSON.stringify(p.citations), Date.now() - p.started, p.knowledgeGap]
   );
   return Number(row!.id);
 }
@@ -183,5 +257,6 @@ export async function answerOnce(
   }
   const messageId = await saveAnswer(p, text).catch((e) => (console.error("Saving reply failed:", e), null));
   await recordAnswer(p, run, { status: "ok", messageId });
+  await cacheAnswer(p, run, text);
   return { text, citations: usedCitations(text, p) };
 }

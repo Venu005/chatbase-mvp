@@ -14,6 +14,7 @@ import { costUsd, embeddingCostUsd, parsePrices } from "../src/lib/pricing.ts";
 import { containsAny, isRefusal, normalize, percentile, rankOf, regressions, script } from "../src/lib/eval-score.ts";
 import { dropNearDuplicates, fuse, keywordCoverage, keywordQuery, keywordTerms } from "../src/lib/keywords.ts";
 import { rerank } from "../src/lib/rerank.ts";
+import { questionKey } from "../src/lib/cache-key.ts";
 import http from "node:http";
 import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
@@ -402,4 +403,14 @@ test("rerank: Cohere/Jina-style API reorders candidates; failures keep the origi
   } finally {
     server.close();
   }
+});
+
+test("questionKey: same question in any casing/punctuation, but words, numbers and script matter", () => {
+  assert.equal(questionKey("What are your timings?"), questionKey("  what are your TIMINGS "));
+  assert.equal(questionKey("COD milta hai kya??"), "cod milta hai kya");
+  assert.notEqual(questionKey("Price of AA-5K"), questionKey("Price of AA-10K"));
+  assert.equal(questionKey("डिलीवरी कब होगी?"), "डिलीवरी कब होगी");
+  assert.notEqual(questionKey("delivery kab hogi"), questionKey("डिलीवरी कब होगी"));
+  assert.equal(questionKey("???"), null);
+  assert.equal(questionKey("x".repeat(201)), null, "long questions aren't cached");
 });

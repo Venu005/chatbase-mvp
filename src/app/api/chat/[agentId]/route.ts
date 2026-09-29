@@ -3,7 +3,7 @@ import { z } from "zod";
 import { HttpError, clientIp, handle, rateLimit } from "@/lib/http";
 import { getUser } from "@/lib/auth";
 import { q1 } from "@/lib/db";
-import { loadAgent, prepareAnswer, saveAnswer, streamAnswer, usedCitations } from "@/lib/answer";
+import { cacheAnswer, loadAgent, prepareAnswer, saveAnswer, streamAnswer, usedCitations } from "@/lib/answer";
 import { newRun } from "@/lib/providers/resilient";
 import { recordAnswer } from "@/lib/ai-log";
 import { refundCredit } from "@/lib/usage";
@@ -87,6 +87,7 @@ export const POST = handle<Ctx>(async (req, { params }) => {
         if (!saved && answer.trim()) messageId = await saveAnswer(prepared, answer).catch((e) => (console.error("Saving reply failed:", e), null)); // partial answer (client left or stream broke)
         if (failed) await refundCredit(agent.user_id).catch(() => {});
         await recordAnswer(prepared, run, { status: !error ? "ok" : answer.trim() ? "partial" : "error", messageId, error, answer });
+        if (!error) await cacheAnswer(prepared, run, answer);
         try {
           controller.close();
         } catch {

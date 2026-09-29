@@ -141,6 +141,25 @@ try {
   assert.equal((await sources()).find((x) => x.id === doomed).status, "processing");
   ok("after the last attempt a source fails; text and file sources can now be retried too");
 
+  // ---- Phase 4: answer cache ----------------------------------------------------------------------------
+  const cq = "What is the refund policy for returns?";
+  const c1 = await chat(agentId, sid(), cq);
+  const u1 = await used();
+  const c2 = await chat(agentId, sid(), "  what is the REFUND policy for returns ");
+  assert.equal(c2.text, c1.text, "the same first question gets the stored answer");
+  assert.deepEqual(c2.done.citations, c1.done.citations);
+  assert.equal(await used(), u1 + 1, "a cached answer still uses the customer's credit");
+  ok("a repeated first question is answered from the cache (same answer and citations)");
+
+  const FU = sid();
+  await chat(agentId, FU, "Hello");
+  const f2 = await chat(agentId, FU, cq);
+  assert.ok(f2.done, "follow-ups are answered fresh");
+  await a.json(`/api/agents/${agentId}/fixes`, { method: "POST", body: { question: cq, answer: "Returns: 14 days now, no questions asked." } });
+  const c3 = await chat(agentId, sid(), cq);
+  assert.ok(c3.text.includes("14 days now"), "a Q&A change invalidates the cache: " + c3.text);
+  ok("follow-ups skip the cache, and changing the agent's knowledge (a new Q&A answer) invalidates it at once");
+
   // ---- Admin view ---------------------------------------------------------------------------------------
   assert.equal((await a.json("/api/admin/overview")).status, 404, "non-admins don't see the admin API");
   assert.equal((await a.req("/admin")).status, 404, "or the page");
@@ -170,6 +189,8 @@ try {
   assert.ok(trace.retrieved.length >= 1 && trace.retrieved[0].content.includes("7 days") && trace.retrieved[0].score > 0, JSON.stringify(trace.retrieved));
   assert.equal(trace.call.prompt_version, "2026-09-29.1");
   const detail = (await admin.json(`/api/admin/accounts/${me.id}?days=1`)).data;
+  assert.ok(detail.calls.some((x) => x.question?.includes("REFUND policy") && x.model !== "mock"), "cache hits are recorded (model = cached model)");
+  assert.ok(ov.models.some((m) => m.provider === "cache" && m.calls >= 1 && m.cost_usd === 0), JSON.stringify(ov.models));
   assert.ok(detail.agents.some((x) => x.name === "AI Bot" && x.answers >= 4 && x.sources >= 4));
   assert.ok(detail.calls.some((x) => x.kind === "ingest"));
   assert.equal((await a.json(`/api/admin/calls/${retried.id}`)).status, 404);

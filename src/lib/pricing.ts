@@ -18,7 +18,7 @@ export function parsePrices(spec: string | undefined): Map<string, Price> {
 
 /** Cost in USD, or null when the model has no configured price. */
 export function costUsd(prices: Map<string, Price>, provider: string, model: string, inputTokens: number, outputTokens: number): number | null {
-  if (provider === "mock") return 0;
+  if (provider === "mock" || provider === "cache") return 0;
   const p = prices.get(model.toLowerCase());
   if (!p) return null;
   return Math.round(((inputTokens * p.input + outputTokens * p.output) / 1_000_000) * 1e6) / 1e6;

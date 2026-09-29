@@ -90,6 +90,7 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `EMBEDDING_TIMEOUT_MS`, `EMBEDDING_RETRIES` | `30000`, `3` | Time limit and retries for embedding calls. |
 | `RETRIEVAL_MIN_SCORE` | `0.2` (`0.1` in `.env.example`) | Passages scoring below this similarity are ignored. Tune per embedding model. |
 | `CHUNK_SIZE`, `CHUNK_OVERLAP` | `900`, `120` | Passage size and overlap in characters, for newly indexed sources. Tune with `pnpm eval`. |
+| `ANSWER_CACHE`, `ANSWER_CACHE_TTL_HOURS` | on, `24` | Reuse the answer to a visitor's first question asked word for word before (not in the playground). Invalidated automatically when sources, Q&A answers, instructions, the prompt or the model change. |
 | `HYBRID_SEARCH` | on | Keyword search next to meaning search, merged by rank (product codes, names, prices, Hindi and Hinglish words). `off` = meaning only. |
 | `KEYWORD_MIN_COVERAGE` | `0.5` | A passage found only by keywords must contain this share of the question's meaningful words. |
 | `RERANK_API_KEY`, `RERANK_MODEL`, `RERANK_BASE_URL`, `RERANK_TIMEOUT_MS` | off, –, `https://api.cohere.com/v2`, `3000` | Optional reranking of the merged results with a Cohere- or Jina-compatible `/rerank` API. Falls back to the merged order on any failure. |
