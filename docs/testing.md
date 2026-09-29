@@ -74,3 +74,33 @@ saved to `eval/results/`. Baselines live in `eval/baselines/`, one per dataset a
 models mean anything**: the mock embeddings match shared words, so paraphrases and Hinglish fail by design. Run it with your
 production models before and after every prompt, retrieval or model change, and add your customers' real questions to a
 dataset of your own (same JSON format).
+
+### Comparing models
+
+Baselines are kept per dataset **and** model combination (`eval/baselines/<dataset>__<chat model>_<embedding model>.json`),
+so you can compare setups side by side:
+
+1. Point `.env` at the candidate (for example `EMBEDDING_MODEL=text-embedding-3-large`, or a multilingual model such as
+   BGE-M3 behind an OpenAI-compatible server) and run `pnpm eval -- --save-baseline`.
+2. Repeat for each candidate, then compare the saved files (retrieval hit@k and MRR for embeddings; answer, refusal,
+   language and grounded rates, time to first word and cost per answer for chat models).
+3. An embedding model with a **different dimension** needs its own database (the vector column's size is fixed by
+   `EMBEDDING_DIM` at `pnpm migrate`): use a scratch `DATABASE_URL` for the comparison.
+
+For Hindi and Hinglish customers, look at the `hindi` and `hinglish` rows specifically: English-only embedding models
+often do well overall and poorly there.
+
+### Kirana dataset, mock models
+
+What the retrieval changes did on `eval/datasets/kirana.json` with the offline mock models (the mock embeddings match
+shared words, so paraphrase scores understate what real models achieve):
+
+| Stage | hit@k | top-1 | MRR | answer | refuse |
+| --- | --- | --- | --- | --- | --- |
+| Vector search only | 50% | 43% | 0.46 | 46% | 100% |
+| + keyword search (hybrid, RRF) | 93% | 79% | 0.86 | 75% | 50% |
+| + keyword coverage rule | 86% | 75% | 0.80 | 75% | 100% |
+| + filler-word tuning (current) | 89% | 75% | 0.82 | 71%* | 100% |
+
+\* The mock answers from the first 400 characters of the top passage only, so some correct retrievals score as wrong
+answers; retrieval scores are the reliable signal with the mock.
