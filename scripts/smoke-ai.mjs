@@ -175,6 +175,18 @@ try {
   assert.equal((await a.json(`/api/admin/calls/${retried.id}`)).status, 404);
   ok("answer trace shows the question, answer, retries and the exact passages (with scores); account drill-down works");
 
+  const FS = sid();
+  await chat(agentId, FS, "What is the refund policy?");
+  await chat(agentId, FS, "and for opened items?");
+  const followTrace = (await admin.json("/api/admin/overview?days=1")).data; // make sure the call is recorded first
+  const detail2 = (await admin.json(`/api/admin/accounts/${me.id}?days=1`)).data;
+  const fc = detail2.calls.find((x) => x.question === "and for opened items?");
+  const ft = (await admin.json(`/api/admin/calls/${fc.id}`)).data;
+  assert.ok(ft.call.search_query?.includes("What is the refund policy?") && ft.call.search_query.includes("and for opened items?"), JSON.stringify(ft.call.search_query));
+  assert.ok(ft.retrieved.every((r) => ["vector", "keyword", "both"].includes(r.via)), JSON.stringify(ft.retrieved));
+  assert.ok(followTrace.totals.answers > 0);
+  ok("follow-up questions are searched with their context, and the trace shows what was searched and by which search");
+
   // Simulate an embedding model change: passages made by "old:model" aren't searched until re-indexed.
   const db2 = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await db2.connect();

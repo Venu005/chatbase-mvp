@@ -25,8 +25,8 @@ export async function recordAnswer(
     await q(
       `INSERT INTO ai_calls (user_id, agent_id, conversation_id, message_id, kind, channel, provider, model, prompt_version, status, error,
                              input_tokens, output_tokens, tokens_estimated, cost_usd, first_token_ms, total_ms, attempts, fallback_used,
-                             question, retrieved, fixes)
-       VALUES ($1,$2,$3,$4,'answer',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+                             question, retrieved, fixes, search_query, rewrite_model, rewrite_tokens)
+       VALUES ($1,$2,$3,$4,'answer',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
       [
         p.userId,
         p.agentId,
@@ -41,7 +41,7 @@ export async function recordAnswer(
         usage?.inputTokens ?? 0,
         usage?.outputTokens ?? 0,
         usage?.estimated ?? !usage,
-        usage ? costUsd(priceTable(), run.provider, run.model, usage.inputTokens, usage.outputTokens) : null,
+        totalCost(usage ? costUsd(priceTable(), run.provider, run.model, usage.inputTokens, usage.outputTokens) : null, p.rewrite),
         run.firstTokenMs,
         Date.now() - p.started,
         Math.max(1, run.attempts),
@@ -49,11 +49,22 @@ export async function recordAnswer(
         p.question.slice(0, 1000),
         JSON.stringify(p.retrieved),
         JSON.stringify(p.fixes),
+        p.searchQuery === p.question ? null : p.searchQuery.slice(0, 1000),
+        p.rewrite?.model ?? null,
+        p.rewrite?.usage ? p.rewrite.usage.inputTokens + p.rewrite.usage.outputTokens : 0,
       ]
     );
   } catch (e) {
     console.error("Recording the AI call failed:", (e as Error).message);
   }
+}
+
+/** Answer cost plus the follow-up rewrite's (null if either has no price). */
+function totalCost(answer: number | null, rewrite: Prepared["rewrite"]): number | null {
+  if (!rewrite?.usage) return answer;
+  const [provider, ...rest] = rewrite.model.split(":");
+  const r = costUsd(priceTable(), provider, rest.join(":"), rewrite.usage.inputTokens, rewrite.usage.outputTokens);
+  return answer === null || r === null ? null : Math.round((answer + r) * 1e6) / 1e6;
 }
 
 /** Records the embedding work of one ingested source (tokens estimated from its size). Never throws. */

@@ -92,6 +92,8 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `CHUNK_SIZE`, `CHUNK_OVERLAP` | `900`, `120` | Passage size and overlap in characters, for newly indexed sources. Tune with `pnpm eval`. |
 | `HYBRID_SEARCH` | on | Keyword search next to meaning search, merged by rank (product codes, names, prices, Hindi and Hinglish words). `off` = meaning only. |
 | `KEYWORD_MIN_COVERAGE` | `0.5` | A passage found only by keywords must contain this share of the question's meaningful words. |
+| `RERANK_API_KEY`, `RERANK_MODEL`, `RERANK_BASE_URL`, `RERANK_TIMEOUT_MS` | off, –, `https://api.cohere.com/v2`, `3000` | Optional reranking of the merged results with a Cohere- or Jina-compatible `/rerank` API. Falls back to the merged order on any failure. |
+| `QUERY_REWRITE`, `QUERY_REWRITE_PROVIDER`, `QUERY_REWRITE_MODEL`, `QUERY_REWRITE_TIMEOUT_MS` | `off`, main provider, main model, `2500` | Rewrite follow-up questions into standalone search queries with a (small) model before searching. |
 | `ANSWER_FIX_MIN_SCORE` | `0.5` | How similar a visitor's question must be to a Q&A answer's question for the owner's answer to be used. Raise it if Q&A answers show up for unrelated questions. |
 
 ### WhatsApp (guides: [whatsapp.md](whatsapp.md), [embedded-signup.md](embedded-signup.md))

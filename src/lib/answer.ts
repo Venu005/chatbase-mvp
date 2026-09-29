@@ -4,6 +4,8 @@ import { getFallbackLLM, getLLM } from "./providers";
 import { newRun, resilientStream, type Run } from "./providers/resilient";
 import { trimHistory } from "./providers/turns";
 import { recordAnswer } from "./ai-log";
+import { queryRewriteEnabled, rewriteFollowUp } from "./query-rewrite";
+import type { Usage } from "./providers/types";
 import { envNum } from "./env";
 import type { ChatMessage } from "./providers/types";
 import { PROMPT_VERSION, buildSystemPrompt, retrieveKnowledge, toCitations, type Citation } from "./rag";
@@ -48,6 +50,9 @@ export type Prepared = {
   /** What retrieval found, kept for the answer trace. */
   retrieved: { chunkId: number; score: number; title: string; url: string | null; via?: string }[];
   fixes: { id: string; score: number; question: string }[];
+  /** What retrieval searched for, and the follow-up rewrite that produced it (if QUERY_REWRITE=on). */
+  searchQuery: string;
+  rewrite: { model: string; usage: Usage | null } | null;
   system: string;
   history: ChatMessage[];
   citations: Citation[];
@@ -103,7 +108,11 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
 
     // Retrieval query = the latest question plus the previous user question, so follow-ups like "and the price?" still work.
     const lastUser = [...prior].reverse().find((m) => m.role === "user")?.content;
-    const { chunks, fixes } = await retrieveKnowledge(agent.id, lastUser ? `${lastUser}\n${message}` : message, message);
+    // Follow-ups ("and the 10 kg one?") need the earlier question to be searchable: rewritten by a small model when
+    // QUERY_REWRITE=on, otherwise the previous question is simply searched together with the new message.
+    const rewrite = lastUser && queryRewriteEnabled() ? await rewriteFollowUp(prior, message) : null;
+    const searchQuery = rewrite?.query ?? (lastUser ? `${lastUser}\n${message}` : message);
+    const { chunks, fixes } = await retrieveKnowledge(agent.id, searchQuery, message);
 
     await q("INSERT INTO messages (conversation_id, role, content) VALUES ($1,'user',$2)", [conversationId, message]);
     return {
@@ -112,6 +121,8 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
       userId: agent.user_id,
       channel,
       question: message,
+      searchQuery,
+      rewrite: rewrite && { model: rewrite.model, usage: rewrite.usage },
       promptVersion: PROMPT_VERSION,
       retrieved: chunks.map((c) => ({ chunkId: Number(c.id), score: Math.round(c.score * 1000) / 1000, title: c.page_title || c.source_title, url: c.page_url, via: c.via })),
       fixes: fixes.map((f) => ({ id: f.id, score: Math.round(f.score * 1000) / 1000, question: f.question })),

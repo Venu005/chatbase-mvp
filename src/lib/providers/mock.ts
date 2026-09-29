@@ -80,6 +80,16 @@ export function mockChat(model = "mock"): LLMProvider {
       }
 
       let answer: string;
+      // Follow-up rewriting (QUERY_REWRITE=on): the mock just joins the previous and latest customer messages.
+      if (system.startsWith("Rewrite the customer's latest message")) {
+        const lines = question.split("\n");
+        const latest = lines.pop()!.replace(/^Customer \(latest\): /, "");
+        const prev = lines.reverse().find((l) => l.startsWith("Customer: "))?.slice(10) ?? "";
+        const q = `${prev} ${latest}`.trim();
+        yield q;
+        onUsage?.({ inputTokens: estimateTokens(system + question), outputTokens: estimateTokens(q), estimated: true });
+        return;
+      }
       // Owner-written Q&A fixes win, as the real prompt instructs.
       const verified = system.match(/<verified_answers>\nQ: [^\n]*\nA: ([\s\S]*?)(?=\n\nQ: |\n<\/verified_answers>)/)?.[1];
       if (verified) answer = `(mock model) ${verified.trim()}`;

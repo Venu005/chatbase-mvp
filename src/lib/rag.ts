@@ -1,7 +1,8 @@
 import { q, toVector } from "./db";
 import { embeddingModelId, getEmbedder } from "./providers";
 import { env, envNum } from "./env";
-import { fuse, keywordCoverage, keywordQuery } from "./keywords";
+import { dropNearDuplicates, fuse, keywordCoverage, keywordQuery } from "./keywords";
+import { rerank, rerankConfigured } from "./rerank";
 
 export type Retrieved = {
   id: number;
@@ -76,10 +77,19 @@ async function searchChunks(agentId: string, vec: number[], text: string): Promi
   // A passage found only by its words must share at least KEYWORD_MIN_COVERAGE (default half) of the question's words.
   const minCover = envNum("KEYWORD_MIN_COVERAGE", 0.5);
   const words = byWords.filter((r) => inVector.has(Number(r.id)) || keywordCoverage(text, r.content + " " + (r.page_title || r.source_title)) >= minCover);
-  if (!words.length) return vector.slice(0, k).map((r) => ({ ...r, via: "vector" as const }));
-  return fuse([vector, words], (r) => Number(r.id))
-    .slice(0, k)
-    .map(({ item, in: lists }) => ({ ...item, via: lists.length > 1 ? ("both" as const) : lists[0] === 0 ? ("vector" as const) : ("keyword" as const) }));
+  const ranked: Retrieved[] = words.length
+    ? fuse([vector, words], (r) => Number(r.id)).map(({ item, in: lists }) => ({
+        ...item,
+        via: lists.length > 1 ? ("both" as const) : lists[0] === 0 ? ("vector" as const) : ("keyword" as const),
+      }))
+    : vector.map((r) => ({ ...r, via: "vector" as const }));
+  const unique = dropNearDuplicates(ranked);
+  if (rerankConfigured()) {
+    const candidates = unique.slice(0, 20);
+    const order = await rerank(text, candidates.map((c) => `${c.page_title || c.source_title}\n${c.content}`), k);
+    if (order) return order.map((i) => candidates[i]);
+  }
+  return unique.slice(0, k);
 }
 
 export function buildSystemPrompt(

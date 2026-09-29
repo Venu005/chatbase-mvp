@@ -88,3 +88,25 @@ export function fuse<T>(lists: T[][], key: (x: T) => string | number, k = 60): {
   );
   return [...acc.values()].sort((a, b) => b.score - a.score);
 }
+
+/**
+ * Drops passages that say (nearly) the same thing as a better-ranked one: websites repeat headers, footers and
+ * product blurbs across pages, and sending duplicates wastes the model's context and tokens. Word-set Jaccard ≥ 0.8.
+ */
+export function dropNearDuplicates<T extends { content: string }>(ranked: T[], threshold = 0.8): T[] {
+  const sets: Set<string>[] = [];
+  const out: T[] = [];
+  for (const r of ranked) {
+    const words = new Set(r.content.toLowerCase().normalize("NFC").match(WORD) ?? []);
+    const dup = sets.some((s) => {
+      let common = 0;
+      for (const w of words) if (s.has(w)) common++;
+      const union = s.size + words.size - common;
+      return union > 0 && common / union >= threshold;
+    });
+    if (dup) continue;
+    sets.push(words);
+    out.push(r);
+  }
+  return out;
+}

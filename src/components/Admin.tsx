@@ -153,13 +153,15 @@ type Trace = {
     attempts: number;
     fallback_used: boolean;
     question: string | null;
+    search_query: string | null;
+    rewrite_model: string | null;
     email: string;
     agent_name: string | null;
     channel: string | null;
   };
   answer: string | null;
   feedback: number | null;
-  retrieved: { chunkId: number; score: number; title: string; url: string | null; content: string | null }[];
+  retrieved: { chunkId: number; score: number; title: string; url: string | null; via?: string; content: string | null }[];
   fixes: { id: string; score: number; question: string; answer: string | null }[];
 };
 
@@ -682,6 +684,11 @@ function TracePanel({ id, rate, onClose }: { id: string; rate: number | null; on
             <div>
               <p className="label">Question</p>
               <p className="msg">{c.question}</p>
+              {c.search_query && (
+                <p className="muted small">
+                  Searched for: “{c.search_query}”{c.rewrite_model && ` (rewritten by ${c.rewrite_model})`}
+                </p>
+              )}
             </div>
             <div>
               <p className="label">Answer</p>
@@ -710,7 +717,10 @@ function TracePanel({ id, rate, onClose }: { id: string; rate: number | null; on
                     <strong>
                       [{i + 1}] {r.title}
                     </strong>
-                    <Score v={r.score} />
+                    <span className="row-form small muted">
+                      {r.via && <span title="Which search found it">{r.via === "both" ? "meaning + words" : r.via === "keyword" ? "words" : "meaning"}</span>}
+                      <Score v={r.score} />
+                    </span>
                   </div>
                   {r.url && <a className="small" href={r.url} target="_blank" rel="noopener noreferrer">{r.url}</a>}
                   <p className="msg small">{r.content ?? <span className="muted">(passage since deleted or re-indexed)</span>}</p>

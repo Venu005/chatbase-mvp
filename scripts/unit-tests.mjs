@@ -12,7 +12,9 @@ import { newRun, resilientStream, withRetries } from "../src/lib/providers/resil
 import { ProviderError } from "../src/lib/providers/types.ts";
 import { costUsd, embeddingCostUsd, parsePrices } from "../src/lib/pricing.ts";
 import { containsAny, isRefusal, normalize, percentile, rankOf, regressions, script } from "../src/lib/eval-score.ts";
-import { fuse, keywordCoverage, keywordQuery, keywordTerms } from "../src/lib/keywords.ts";
+import { dropNearDuplicates, fuse, keywordCoverage, keywordQuery, keywordTerms } from "../src/lib/keywords.ts";
+import { rerank } from "../src/lib/rerank.ts";
+import http from "node:http";
 import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
 import { csvCell, normalizeEmail, normalizePhone, parseContact, toCsv } from "../src/lib/leads.ts";
@@ -368,4 +370,36 @@ test("fuse (reciprocal rank fusion): agreement between lists wins", () => {
   assert.equal(r[0].item, "c", "c is in both lists");
   assert.deepEqual(r[0].in, [0, 1]);
   assert.deepEqual(r.map((x) => x.item).sort(), ["a", "b", "c", "d"]);
+});
+
+test("dropNearDuplicates keeps the best-ranked copy of repeated boilerplate", () => {
+  const footer = "Sharma Kirana, 12 CMH Road, Indiranagar. Call +91 98450 12345. Open 7am to 10pm.";
+  const r = dropNearDuplicates([{ id: 1, content: footer }, { id: 2, content: "Atta 5 kg costs ₹265." }, { id: 3, content: footer + " " }, { id: 4, content: footer.replace("7am", "8am") }]);
+  assert.deepEqual(r.map((x) => x.id), [1, 2]);
+});
+
+test("rerank: Cohere/Jina-style API reorders candidates; failures keep the original order", async () => {
+  let body = null;
+  const server = http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", (d) => (raw += d));
+    req.on("end", () => {
+      body = JSON.parse(raw);
+      if (body.query === "fail") return (res.statusCode = 500), res.end("boom");
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ results: [{ index: 2, relevance_score: 0.9 }, { index: 0, relevance_score: 0.4 }] }));
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  Object.assign(process.env, { RERANK_API_KEY: "k", RERANK_MODEL: "rerank-test", RERANK_BASE_URL: `http://127.0.0.1:${server.address().port}` });
+  try {
+    assert.deepEqual(await rerank("atta price", ["a", "b", "c"], 2), [2, 0]);
+    assert.equal(body.model, "rerank-test");
+    assert.equal(body.top_n, 2);
+    assert.equal(await rerank("fail", ["a", "b"], 2), null, "server error: keep the fused order");
+    delete process.env.RERANK_API_KEY;
+    assert.equal(await rerank("x", ["a", "b"], 2), null, "not configured");
+  } finally {
+    server.close();
+  }
 });
