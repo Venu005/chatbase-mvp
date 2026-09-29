@@ -18,6 +18,7 @@ They need Postgres migrated, and a production build of the app running with the 
 pnpm build
 # terminal 1: start the app with the fake-service settings the scripts expect
 SIGNUP_RATE_LIMIT=1000 \
+LLM_FIRST_TOKEN_TIMEOUT_MS=2000 LLM_FALLBACK_PROVIDER=mock LLM_FALLBACK_MODEL=backup \
 WHATSAPP_GRAPH_BASE_URL=http://127.0.0.1:4020 \
 SARVAM_API_KEY=sarvam-test-key SARVAM_STT_URL=http://127.0.0.1:4020/speech-to-text \
 SMTP_URL=smtp://127.0.0.1:4025 EMAIL_FROM="Bot <bot@example.com>" \
@@ -29,6 +30,7 @@ pnpm start
 
 # terminal 2
 pnpm smoke             # accounts, ingestion, RAG answers, isolation, limits, widget, rate limits
+pnpm smoke:ai          # AI pipeline: retries, timeouts, backup model, usage and cost records, admin view
 pnpm smoke:features    # 👍/👎 feedback, Q&A answers, analytics, lead capture and CSV
 pnpm smoke:account     # password reset e-mails and links, allowed websites for the widget
 pnpm smoke:whatsapp    # manual WhatsApp connection, webhook signatures, dedupe, replies, credits

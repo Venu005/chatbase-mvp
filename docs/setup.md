@@ -75,6 +75,13 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `EMBEDDING_DIM` | `1536` | Vector size of the model. **Fixed when you first run `pnpm migrate`.** |
 | `EMBEDDING_SEND_DIMENSIONS` | `false` | `true` for models that accept a `dimensions` parameter. |
 | `RETRIEVAL_TOP_K` | `6` | How many passages are given to the model per question. |
+| `LLM_FIRST_TOKEN_TIMEOUT_MS`, `LLM_TIMEOUT_MS` | `20000`, `90000` | Time limits for the first word of an answer and for the whole answer. |
+| `LLM_RETRIES` | `2` | Retries (with backoff) for rate limits, overload, server errors and timeouts, only before any text reaches the customer. |
+| `LLM_FALLBACK_PROVIDER`, `LLM_FALLBACK_MODEL` | off | Backup model used when the main one keeps failing (for example `openai` with a small model). |
+| `LLM_MAX_TOKENS` | `1024` (anthropic) | Longest answer in tokens. |
+| `OPENAI_STREAM_USAGE` | `true` | Ask OpenAI-compatible servers to report token usage; set `false` for a server that rejects `stream_options`. |
+| `HISTORY_MAX_CHARS` | `6000` | How much of the conversation (newest first) is sent with each question. |
+| `EMBEDDING_TIMEOUT_MS`, `EMBEDDING_RETRIES` | `30000`, `3` | Time limit and retries for embedding calls. |
 | `RETRIEVAL_MIN_SCORE` | `0.2` (`0.1` in `.env.example`) | Passages scoring below this similarity are ignored. Tune per embedding model. |
 | `ANSWER_FIX_MIN_SCORE` | `0.5` | How similar a visitor's question must be to a Q&A answer's question for the owner's answer to be used. Raise it if Q&A answers show up for unrelated questions. |
 

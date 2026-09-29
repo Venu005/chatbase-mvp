@@ -1,6 +1,9 @@
 import { q, q1 } from "./db";
 import { HttpError } from "./http";
-import { getLLM } from "./providers";
+import { getFallbackLLM, getLLM } from "./providers";
+import { newRun, resilientStream, type Run } from "./providers/resilient";
+import { trimHistory } from "./providers/turns";
+import { envNum } from "./env";
 import type { ChatMessage } from "./providers/types";
 import { buildSystemPrompt, retrieveKnowledge, toCitations, type Citation } from "./rag";
 import { refundCredit, reserveCredit } from "./usage";
@@ -87,7 +90,7 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
        ) t ORDER BY id`,
       [conversationId, HISTORY_TURNS * 2]
     );
-    const history: ChatMessage[] = [...prior, { role: "user", content: message }];
+    const history: ChatMessage[] = [...trimHistory(prior, envNum("HISTORY_MAX_CHARS", 6000)), { role: "user", content: message }];
 
     // Retrieval query = the latest question plus the previous user question, so follow-ups like "and the price?" still work.
     const lastUser = [...prior].reverse().find((m) => m.role === "user")?.content;
@@ -109,6 +112,11 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
 }
 
 /** Stores the bot's reply; returns its message id (the widget uses it for 👍/👎 feedback). */
+/** Streams the bot's reply through the production wrapper (timeouts, retries, backup model). */
+export function streamAnswer(p: Prepared, run: Run, signal?: AbortSignal): AsyncGenerator<string> {
+  return resilientStream({ system: p.system, messages: p.history, signal }, getLLM(), getFallbackLLM(), run);
+}
+
 export async function saveAnswer(p: Prepared, answer: string): Promise<number> {
   const row = await q1<{ id: string }>(
     "INSERT INTO messages (conversation_id, role, content, citations, latency_ms, knowledge_gap) VALUES ($1,'assistant',$2,$3,$4,$5) RETURNING id",
@@ -136,8 +144,9 @@ export async function answerOnce(
   const p = await prepareAnswer(agent, sessionId, channel, message);
   if ("handedOff" in p) return p;
   let text = "";
+  const run = newRun();
   try {
-    for await (const delta of getLLM().stream({ system: p.system, messages: p.history })) text += delta;
+    for await (const delta of streamAnswer(p, run)) text += delta;
     if (!text.trim()) throw new Error("The model returned an empty reply");
   } catch (e) {
     await refundCredit(agent.user_id).catch(() => {});

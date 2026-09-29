@@ -1,17 +1,19 @@
-import type { LLMProvider, StreamOptions } from "./types";
+import { ProviderError, assertOk, type LLMProvider, type StreamOptions } from "./types";
 import { sseData } from "./sse";
 import { normalizeTurns } from "./turns";
-import { env, envStr } from "../env";
+import { env, envNum, envStr } from "../env";
 
-export function anthropicChat(): LLMProvider {
+export function anthropicChat(modelOverride?: string): LLMProvider {
   const base = envStr("ANTHROPIC_BASE_URL", "https://api.anthropic.com").replace(/\/$/, "");
   const key = env("ANTHROPIC_API_KEY");
-  const model = env("LLM_MODEL");
+  const model = modelOverride ?? env("LLM_MODEL");
+  const maxTokens = envNum("LLM_MAX_TOKENS", 1024);
   return {
     name: "anthropic",
-    async *stream({ system, messages, temperature = 0.2, signal }: StreamOptions) {
-      if (!model) throw new Error("LLM_MODEL is not set");
-      if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
+    model: model ?? "",
+    async *stream({ system, messages, temperature = 0.2, signal, onUsage }: StreamOptions) {
+      if (!model) throw new ProviderError("LLM_MODEL is not set", undefined, false);
+      if (!key) throw new ProviderError("ANTHROPIC_API_KEY is not set", undefined, false);
       const res = await fetch(`${base}/v1/messages`, {
         method: "POST",
         signal,
@@ -20,19 +22,26 @@ export function anthropicChat(): LLMProvider {
           "x-api-key": key,
           "anthropic-version": "2023-06-01",
         },
-        body: JSON.stringify({ model, max_tokens: 1024, temperature, stream: true, system, messages: normalizeTurns(messages) }),
+        body: JSON.stringify({ model, max_tokens: maxTokens, temperature, stream: true, system, messages: normalizeTurns(messages) }),
       });
-      if (!res.ok || !res.body) throw new Error(`LLM request failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+      await assertOk(res, "LLM request");
+      if (!res.body) throw new ProviderError("LLM returned no body");
+      let inputTokens = 0;
+      let outputTokens = 0;
       for await (const data of sseData(res.body)) {
+        let ev;
         try {
-          const ev = JSON.parse(data);
-          if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) yield ev.delta.text;
-          if (ev.type === "error") throw new Error(ev.error?.message ?? "LLM stream error");
-        } catch (e) {
-          if (e instanceof SyntaxError) continue;
-          throw e;
+          ev = JSON.parse(data);
+        } catch {
+          continue; // keep-alive / partial frame
         }
+        if (ev.type === "message_start") inputTokens = ev.message?.usage?.input_tokens ?? 0;
+        else if (ev.type === "message_delta" && ev.usage?.output_tokens !== undefined) outputTokens = ev.usage.output_tokens;
+        else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) yield ev.delta.text;
+        // Errors inside the stream (e.g. "overloaded_error") come as an event, not an HTTP status.
+        else if (ev.type === "error") throw new ProviderError(ev.error?.message ?? "LLM stream error", ev.error?.type === "overloaded_error" ? 529 : undefined);
       }
+      onUsage?.({ inputTokens, outputTokens });
     },
   };
 }

@@ -7,7 +7,9 @@ import { formatForWhatsApp } from "../src/lib/wa-format.ts";
 import { decryptSecret, encryptSecret, safeEqual } from "../src/lib/crypto.ts";
 import { phoneFromSession, wantsHuman } from "../src/lib/handoff-intent.ts";
 import { createThinkFilter } from "../src/lib/providers/think.ts";
-import { normalizeTurns } from "../src/lib/providers/turns.ts";
+import { normalizeTurns, trimHistory } from "../src/lib/providers/turns.ts";
+import { newRun, resilientStream, withRetries } from "../src/lib/providers/resilient.ts";
+import { ProviderError } from "../src/lib/providers/types.ts";
 import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
 import { csvCell, normalizeEmail, normalizePhone, parseContact, toCsv } from "../src/lib/leads.ts";
@@ -221,4 +223,97 @@ test("toCsv: quoting, Unicode, and spreadsheet-formula (CSV injection) defusing"
   assert.equal(csvCell("+919876543210"), "+919876543210");
   assert.equal(csvCell("रवि"), "रवि");
   assert.equal(csvCell(null), "");
+});
+
+test("trimHistory keeps the newest turns within the budget and caps long turns", () => {
+  const h = [
+    { role: "user", content: "a".repeat(3000) },
+    { role: "assistant", content: "b".repeat(1000) },
+    { role: "user", content: "c".repeat(1000) },
+  ];
+  const t = trimHistory(h, 2600);
+  assert.deepEqual(t.map((m) => m.content[0]), ["b", "c"], "the oldest turn that doesn't fit is dropped; order is kept");
+  assert.equal(trimHistory(h, 10_000)[0].content.length, 1501, "long turns are capped at 1,500 characters (+ …)");
+  assert.deepEqual(trimHistory(h, 0), []);
+});
+
+// ---- resilient model calls --------------------------------------------------------------------------
+/** A fake chat model: `script` lists, per call, either an error to throw before the first token or the words to send. */
+function fakeLLM(name, script, opts = {}) {
+  let call = 0;
+  return {
+    name,
+    model: `${name}-model`,
+    calls: () => call,
+    async *stream({ signal, onUsage }) {
+      const step = script[Math.min(call++, script.length - 1)];
+      if (step === "hang") await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+      if (step instanceof Error) throw step;
+      for (const [i, w] of step.entries()) {
+        if (opts.breakAfter !== undefined && i === opts.breakAfter) throw new ProviderError("broke", 502);
+        yield w;
+      }
+      onUsage?.({ inputTokens: 10, outputTokens: step.length });
+    },
+  };
+}
+const collect = async (gen) => {
+  let out = "";
+  for await (const d of gen) out += d;
+  return out;
+};
+process.env.LLM_RETRIES = "2";
+
+test("resilientStream: retries rate limits with backoff, then answers", async () => {
+  const llm = fakeLLM("p", [new ProviderError("429", 429), new ProviderError("503", 503), ["ok", "!"]]);
+  const run = newRun();
+  assert.equal(await collect(resilientStream({ system: "", messages: [] }, llm, null, run)), "ok!");
+  assert.equal(run.attempts, 3);
+  assert.equal(run.errors.length, 2);
+  assert.deepEqual(run.usage, { inputTokens: 10, outputTokens: 2 });
+  assert.equal(run.fallbackUsed, false);
+  assert.ok(run.firstTokenMs >= 0);
+});
+
+test("resilientStream: a bad key isn't retried but goes straight to the backup model", async () => {
+  const llm = fakeLLM("p", [new ProviderError("401", 401)]);
+  const backup = fakeLLM("b", [["from backup"]]);
+  const run = newRun();
+  assert.equal(await collect(resilientStream({ system: "", messages: [] }, llm, backup, run)), "from backup");
+  assert.equal(llm.calls(), 1);
+  assert.equal(run.fallbackUsed, true);
+  assert.equal(run.provider, "b");
+});
+
+test("resilientStream: gives up after retries when there is no backup", async () => {
+  const llm = fakeLLM("p", [new ProviderError("500", 500)]);
+  await assert.rejects(collect(resilientStream({ system: "", messages: [] }, llm, null, newRun())), /500/);
+  assert.equal(llm.calls(), 3);
+});
+
+test("resilientStream: never retries once text has reached the customer", async () => {
+  const llm = fakeLLM("p", [["one ", "two ", "three"]], { breakAfter: 2 });
+  let got = "";
+  await assert.rejects(async () => {
+    for await (const d of resilientStream({ system: "", messages: [] }, llm, fakeLLM("b", [["x"]]), newRun())) got += d;
+  }, /broke/);
+  assert.equal(got, "one two ");
+  assert.equal(llm.calls(), 1);
+});
+
+test("resilientStream: a model that never starts answering times out and is retried", async () => {
+  process.env.LLM_FIRST_TOKEN_TIMEOUT_MS = "50";
+  const llm = fakeLLM("p", ["hang", ["late but fine"]]);
+  const run = newRun();
+  assert.equal(await collect(resilientStream({ system: "", messages: [] }, llm, null, run)), "late but fine");
+  assert.match(run.errors[0], /timed out/);
+  delete process.env.LLM_FIRST_TOKEN_TIMEOUT_MS;
+});
+
+test("withRetries: retries retryable errors only", async () => {
+  let n = 0;
+  assert.equal(await withRetries(async () => (++n < 3 ? Promise.reject(new ProviderError("429", 429)) : "done"), { baseMs: 1 }), "done");
+  let m = 0;
+  await assert.rejects(withRetries(async () => (m++, Promise.reject(new ProviderError("400", 400))), { baseMs: 1 }), /400/);
+  assert.equal(m, 1);
 });

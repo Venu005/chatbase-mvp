@@ -3,8 +3,8 @@ import { z } from "zod";
 import { HttpError, clientIp, handle, rateLimit } from "@/lib/http";
 import { getUser } from "@/lib/auth";
 import { q1 } from "@/lib/db";
-import { getLLM } from "@/lib/providers";
-import { loadAgent, prepareAnswer, saveAnswer, usedCitations } from "@/lib/answer";
+import { loadAgent, prepareAnswer, saveAnswer, streamAnswer, usedCitations } from "@/lib/answer";
+import { newRun } from "@/lib/providers/resilient";
 import { refundCredit } from "@/lib/usage";
 
 export const runtime = "nodejs";
@@ -58,8 +58,8 @@ export const POST = handle<Ctx>(async (req, { params }) => {
     });
   }
 
-  const llm = getLLM();
   const abort = new AbortController();
+  const run = newRun();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -67,7 +67,7 @@ export const POST = handle<Ctx>(async (req, { params }) => {
       let failed = false;
       let saved = false;
       try {
-        for await (const delta of llm.stream({ system: prepared.system, messages: prepared.history, signal: abort.signal })) {
+        for await (const delta of streamAnswer(prepared, run, abort.signal)) {
           answer += delta;
           controller.enqueue(line({ type: "delta", text: delta }));
         }

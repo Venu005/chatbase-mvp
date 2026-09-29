@@ -19,6 +19,7 @@
     "smoke:handoff": "node --env-file-if-exists=.env scripts/smoke-handoff.mjs",
     "smoke:account": "node --env-file-if-exists=.env scripts/smoke-account.mjs",
     "smoke:features": "node --env-file-if-exists=.env scripts/smoke-features.mjs",
+    "smoke:ai": "node --env-file-if-exists=.env scripts/smoke-ai.mjs",
     "smoke:embedded": "node --env-file-if-exists=.env scripts/smoke-embedded.mjs",
     "smoke:sarvam": "node --env-file-if-exists=.env scripts/smoke-sarvam.mjs",
     "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test scripts/unit-tests.mjs",
