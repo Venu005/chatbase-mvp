@@ -193,3 +193,33 @@ label.check input { width: auto; }
 .table-wrap { padding: 0; overflow-x: auto; }
 .data-table.leads { width: 100%; margin: 0; }
 .data-table.leads th, .data-table.leads td { padding: 10px 12px; vertical-align: top; }
+
+/* ---- Admin -------------------------------------------------------------- */
+.page.wide { max-width: 1240px; }
+.admin h1 { margin: 0 0 4px; }
+.admin-head { align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.admin-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.tile.bad strong { color: var(--danger); }
+.admin-table { width: 100%; font-size: 14px; }
+.admin-table th, .admin-table td { padding: 8px 10px; vertical-align: top; }
+.admin-table th.num, .admin-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin-table tr.clickable { cursor: pointer; }
+.admin-table tr.clickable:hover td { background: color-mix(in srgb, var(--primary) 5%, transparent); }
+.admin-table .clip { max-width: 380px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.nowrap { white-space: nowrap; }
+.bad { color: var(--danger); }
+.plan { text-transform: capitalize; font-weight: 600; }
+.small-meter { height: 5px; margin-top: 4px; max-width: 160px; }
+.meter.hot > div { background: var(--danger); }
+.trace-backdrop { position: fixed; inset: 0; background: rgba(10, 12, 16, .35); z-index: 50; display: flex; justify-content: flex-end; }
+.trace { width: min(640px, 100%); height: 100%; overflow-y: auto; background: var(--surface); border-left: 1px solid var(--border); padding: 20px 20px 40px; display: flex; flex-direction: column; gap: 16px; }
+.trace-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 16px; margin: 0; }
+.trace-facts dt { font-size: 12px; color: var(--muted); }
+.trace-facts dd { margin: 2px 0 0; }
+.trace-error { white-space: pre-wrap; overflow-wrap: anywhere; }
+.label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.passage { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+.passage .msg { margin: 4px 0 0; }
+.score { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.score-bar { width: 60px; height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; display: inline-block; }
+.score-bar > span { display: block; height: 100%; background: var(--chart); }

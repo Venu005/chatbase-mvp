@@ -77,6 +77,7 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `RETRIEVAL_TOP_K` | `6` | How many passages are given to the model per question. |
 | `INGEST_CONCURRENCY`, `INGEST_MAX_ATTEMPTS`, `INGEST_RETRY_BASE_MS` | `2`, `3`, `30000` | Ingestion queue: jobs at once per server, attempts for transient failures, first retry delay (doubles each time). |
 | `INGEST_WORKER` | on | `off` stops this server from running ingestion jobs (for example on a web-only instance). |
+| `ADMIN_EMAILS` | none | Comma-separated e-mails that can open the admin view at `/admin` ([admin.md](admin.md)). |
 | `LLM_PRICES` | none | USD per million input/output tokens by model id, e.g. `gpt-4.1-mini=0.40/1.60, claude-haiku-4-5=1/5`. Used for cost tracking; models without a price show tokens only. |
 | `EMBEDDING_PRICE_PER_MTOK` | none | USD per million embedded tokens. |
 | `USD_INR_RATE` | none | Also show costs in rupees in the admin view. |

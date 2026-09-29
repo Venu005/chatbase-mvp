@@ -60,6 +60,7 @@ The full variable reference is in [docs/setup.md](docs/setup.md#4-configuration-
 | Guide | Read it when you want to |
 | --- | --- |
 | [docs/guide/index.html](docs/guide/index.html) | read the product guide: every feature, how owners use it, go-live checklist (open in a browser) |
+| [docs/admin.md](docs/admin.md) | watch every account, AI cost, failures and answer traces in the admin view |
 | [docs/setup.md](docs/setup.md) | install, fill in `.env`, look up any variable or command |
 | [docs/providers.md](docs/providers.md) | pick models: OpenAI, Claude, Sarvam, self-hosted; embeddings; Indian-language tips |
 | [docs/whatsapp.md](docs/whatsapp.md) | connect a number manually (paste Phone number ID, token, app secret) |

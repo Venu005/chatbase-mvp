@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { api } from "@/lib/client";
 
-export default function Nav({ email }: { email: string }) {
+export default function Nav({ email, admin = false }: { email: string; admin?: boolean }) {
   async function logout() {
     await api("/api/auth/logout", { method: "POST" }).catch(() => {});
     window.location.href = "/login";
@@ -14,6 +14,7 @@ export default function Nav({ email }: { email: string }) {
         Chatbase India
       </Link>
       <div className="nav-right">
+        {admin && <Link href="/admin">Admin</Link>}
         <Link href="/dashboard/billing">Plans &amp; billing</Link>
         <span className="muted">{email}</span>
         <button className="link-btn" onClick={logout}>
