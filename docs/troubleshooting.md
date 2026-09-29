@@ -54,8 +54,9 @@ the same.
 **pnpm complains about the version (`ERR_PNPM_UNSUPPORTED_ENGINE`, or a different pnpm is used).**
 Run `corepack enable` so the pinned version in `package.json` is used, or install pnpm 10 or newer.
 
-**Port 3000 is already in use.**
-`pnpm dev -p 3001` (and set `APP_URL` to match), or stop the other process.
+**Port 3000 (or 3001) is already in use.**
+The customer app uses 3000 and the admin app 3001. Stop the other process, or change `--port` in the `dev` script of
+`apps/web/package.json` or `apps/admin/package.json` (and set `APP_URL` / `ADMIN_URL` to match).
 
 ## Sources and answers
 
@@ -102,7 +103,7 @@ stream, but turning reasoning off is faster and cheaper.
 rate limit or is out of credit. `pnpm preflight --live` sends one tiny request and prints the provider's own message.
 
 **"This assistant has reached its monthly message limit" (HTTP 402).**
-The account's plan credits are used up (see `src/lib/plans.ts`). Upgrade the plan in **Plans & billing**, or raise the
+The account's plan credits are used up (see `packages/core/src/plans.ts`). Upgrade the plan in **Plans & billing**, or raise the
 limits in `plans.ts`. A message costs one credit and is refunded if generation fails. While a conversation is with a human
 (see below) the bot uses no credits.
 

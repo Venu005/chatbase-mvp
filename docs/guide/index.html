@@ -253,7 +253,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
             <tr><td class="area"></td><td>Scanned PDFs, photos (OCR) and JavaScript websites <span class="tag pr3">New · PR #3</span></td><td>Sources tab, when set up</td></tr>
             <tr><td class="area"></td><td>Durable ingestion queue with retries <span class="tag pr3">New · PR #3</span></td><td>Sources tab (Retry on any failed source)</td></tr>
             <tr><td class="area"></td><td>Quality evaluation (<code>pnpm eval</code>) <span class="tag pr3">New · PR #3</span></td><td>Command line</td></tr>
-            <tr><td class="area">Operator</td><td>Admin view: accounts, AI cost, failures, answer traces <span class="tag pr3">New · PR #3</span></td><td><code>/admin</code></td></tr>
+            <tr><td class="area">Operator</td><td>Admin app: accounts, AI cost, failures, answer traces, adding admins <span class="tag pr3">New · PR #3</span></td><td>admin app (port 3001)</td></tr>
             <tr><td class="area">Account</td><td>Sign up, log in, password reset by e-mail <span class="tag new">New</span></td><td>Login page</td></tr>
             <tr><td class="area"></td><td>Plans, message credits, Razorpay subscriptions</td><td>Plans &amp; billing</td></tr>
           </tbody>
@@ -701,7 +701,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <span class="eyebrow">Part 8 · for platform operators</span>
         <h2>Admin view <span class="tag pr3">New · PR #3</span></h2>
       </div>
-      <p class="prose">At <code>/admin</code>, for the e-mails listed in <code>ADMIN_EMAILS</code>. Everyone else gets a plain "not found". Pick today, 7, 30 or 90 days.</p>
+      <p class="prose">A separate admin app (port 3001 locally, its own address in production) with its own sign-in. The e-mails in <code>ADMIN_EMAILS</code> sign in with <code>ADMIN_PASSWORD</code> and can add more admins in the <b>Admins</b> tab. Pick today, 7, 30 or 90 days.</p>
       <div class="cols">
         <ul class="notes">
           <li><b>Overview</b>: active, new and paying accounts; answers; failure rate; time to first word (average and p95); AI cost in total and per answer; helpful rate; charts of answers and cost per day.</li>
@@ -713,7 +713,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <figure><img src="img/admin-trace.png" alt="Answer trace panel showing result, model, attempts, timings, tokens, cost, the question, the answer and the passage given to the model" width="1320" height="1000" loading="lazy"><figcaption>An answer trace: this one needed 3 attempts after rate limits.</figcaption></figure>
       </div>
       <figure><img src="img/admin-overview.png" alt="Admin overview with stat tiles for accounts, answers, failures, speed, cost and helpfulness, charts of answers and cost per day, and the top accounts table" width="1320" height="1466" loading="lazy"><figcaption>The admin overview with 30 days of example data.</figcaption></figure>
-      <p class="muted small">The admin view shows customers' questions and answers in traces. Keep <code>ADMIN_EMAILS</code> short and mention this in your privacy policy.</p>
+      <p class="muted small">The admin view shows customers' questions and answers in traces. Keep the list of admins short and mention this in your privacy policy.</p>
     </section>
 
     <!-- ================================================================ -->
@@ -755,7 +755,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <li><span>Set <code>SARVAM_API_KEY</code> for voice notes (optional).</span></li>
         <li><span>Billing: the Razorpay keys, webhook secret, and <code>pnpm razorpay:setup</code> for the plan IDs. WhatsApp: the Meta app values for Connect with Facebook.</span></li>
         <li><span>Tune <code>RETRIEVAL_MIN_SCORE</code> (start near 0.25 with real embeddings) and <code>ANSWER_FIX_MIN_SCORE</code> (0.5) on your own customers' questions.</span></li>
-        <li><span>Set <code>ADMIN_EMAILS</code> for the admin view, and <code>LLM_PRICES</code> (plus <code>EMBEDDING_PRICE_PER_MTOK</code>, optionally <code>USD_INR_RATE</code>) from your providers' current price lists.</span></li>
+        <li><span>Set <code>ADMIN_EMAILS</code>, <code>ADMIN_PASSWORD</code> and <code>ADMIN_URL</code> for the admin app, and <code>LLM_PRICES</code> (plus <code>EMBEDDING_PRICE_PER_MTOK</code>, optionally <code>USD_INR_RATE</code>) from your providers' current price lists.</span></li>
         <li><span>Add a backup model (<code>LLM_FALLBACK_PROVIDER</code> / <code>LLM_FALLBACK_MODEL</code>) from a different provider, and optionally a small model for small talk.</span></li>
         <li><span>Optional: <code>OCR_PROVIDER</code> + <code>OCR_MODEL</code> for scanned PDFs and photos, and <code>PRERENDER_URL</code> for JavaScript-built websites.</span></li>
         <li><span>Run <code>pnpm eval -- --save-baseline</code> with your production models, then <code>pnpm eval -- --check</code> before every prompt, search or model change.</span></li>

@@ -25,7 +25,7 @@ and regional-language questions, WhatsApp, INR subscriptions, and a human-handof
 - **Human handoff**: customers can ask for a person (button in the widget, or by typing it, also in Hindi/Hinglish); the bot
   goes quiet, the owner is e-mailed and replies from the dashboard inbox (also to WhatsApp customers), then hands back
 - **Razorpay billing**: Starter / Growth / Pro monthly INR subscriptions; the plan changes only on Razorpay's signed webhook
-- Monthly message-credit limits per plan (placeholder prices in `src/lib/plans.ts`), per-IP rate limiting
+- Monthly message-credit limits per plan (placeholder prices in `packages/core/src/plans.ts`), per-IP rate limiting
 
 ## Quick start
 
@@ -38,7 +38,7 @@ pnpm install
 cp .env.example .env           # then put a real AUTH_SECRET in it:  openssl rand -base64 48
 pnpm migrate
 pnpm preflight                   # checks .env and the database
-pnpm dev                       # http://localhost:3000
+pnpm dev                       # customer app http://localhost:3000, admin app http://localhost:3001
 ```
 
 With the default `.env` the app uses **mock** models, so you can click through everything without any API key. To get real
@@ -60,7 +60,7 @@ The full variable reference is in [docs/setup.md](docs/setup.md#4-configuration-
 | Guide | Read it when you want to |
 | --- | --- |
 | [docs/guide/index.html](docs/guide/index.html) | read the product guide: every feature, how owners use it, go-live checklist (open in a browser) |
-| [docs/admin.md](docs/admin.md) | watch every account, AI cost, failures and answer traces in the admin view |
+| [docs/admin.md](docs/admin.md) | watch every account, AI cost, failures and answer traces in the admin app; add other admins |
 | [docs/setup.md](docs/setup.md) | install, fill in `.env`, look up any variable or command |
 | [docs/providers.md](docs/providers.md) | pick models: OpenAI, Claude, Sarvam, self-hosted; embeddings; Indian-language tips |
 | [docs/whatsapp.md](docs/whatsapp.md) | connect a number manually (paste Phone number ID, token, app secret) |
@@ -75,11 +75,12 @@ The full variable reference is in [docs/setup.md](docs/setup.md#4-configuration-
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev`, `pnpm build`, `pnpm start` | development / production build / production server |
+| `pnpm dev`, `pnpm build`, `pnpm start` | development / production build / production servers, for both apps (`pnpm dev:web`, `pnpm dev:admin` for one) |
 | `pnpm migrate` | apply database migrations (safe to re-run) |
 | `pnpm preflight [--live] [--email you@x.com]` | check `.env` and the database; `--live` also tests AI keys, Razorpay, Meta and SMTP |
 | `pnpm razorpay:setup` | create the monthly INR plans in Razorpay and print the `RAZORPAY_PLAN_*` lines |
 | `pnpm typecheck`, `pnpm test` | TypeScript check; 21 unit tests |
+| `pnpm smoke:admin` | admin sign-in, adding and removing admins, password changes |
 | `pnpm smoke`, `smoke:account`, `smoke:features`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | end-to-end tests against fake external services |
 
 ## How it works
@@ -104,6 +105,7 @@ Conversation history is always read from the database, never trusted from the br
 pnpm test                       # unit tests
 pnpm build && pnpm start &      # then, with the server running:
 pnpm smoke                      # 17 end-to-end checks (auth, ingestion, RAG, isolation, limits)
+pnpm smoke:admin                # 10 checks: admin sign-in, adding/removing admins
 pnpm smoke:whatsapp             # 13 checks
 pnpm smoke:handoff              # 19 checks
 pnpm smoke:embedded             # 13 checks
@@ -147,19 +149,26 @@ The full list is in [docs/deployment.md](docs/deployment.md). The important poin
 - `pnpm audit` reports PostCSS advisories through Next.js 15's bundled copy. They concern processing untrusted CSS, which
   this app never does; upgrade Next when a fixed release you have tested is available.
 - Back up Postgres. Consider an HNSW index if a single agent will hold very large amounts of content (note in
-  `db/migrations/001_init.sql`).
+  `packages/core/db/migrations/001_init.sql`).
 
 ## Layout
 
+A Turborepo with pnpm workspaces. One `.env` at the repo root feeds every app and script.
+
 ```
-db/migrations/        SQL schema (vector size injected from EMBEDDING_DIM)
+apps/web/             the customer app (port 3000)
+  src/app/            pages: landing, login/signup, dashboard, billing, agent workspace, /embed/[id]
+  src/app/api/        REST routes (agents, sources, conversations, public chat, auth, whatsapp, billing, razorpay)
+  src/components/     dashboard + chat UI
+  public/widget.js    the embeddable bubble (vanilla JS, no dependencies)
+  scripts/            preflight, smoke-*.mjs, eval, razorpay-setup
+  eval/               quality eval datasets and baselines
+apps/admin/           the platform-operator dashboard (port 3001), with its own admin sign-in (docs/admin.md)
+packages/core/        shared server code: auth, db, env, chunking, ingestion (SSRF-safe fetch), rag, answer (chat
+                      pipeline), providers/ (openai, anthropic, sarvam), whatsapp, meta, handoff, notify, crypto, razorpay,
+                      billing, plans/usage
+  db/migrations/      SQL schema (vector size injected from EMBEDDING_DIM); `pnpm migrate` runs them
+  test/               unit tests
+packages/ui/          shared styles and charts
 docs/                 guides (see the table above)
-scripts/              migrate, preflight, unit tests, smoke-*.mjs, razorpay-setup
-public/widget.js      the embeddable bubble (vanilla JS, no dependencies)
-src/lib/              auth, db, env, chunking, ingestion (SSRF-safe fetch), rag, answer (shared chat pipeline),
-                      providers/ (openai, anthropic, sarvam), whatsapp, meta (Embedded Signup), handoff, notify (e-mail),
-                      crypto, razorpay, billing, plans/usage
-src/app/api/          REST routes (agents, sources, conversations, public chat, auth, whatsapp, billing, razorpay)
-src/app/              pages: landing, login/signup, dashboard, billing, agent workspace, /embed/[id]
-src/components/       dashboard + chat UI
 ```

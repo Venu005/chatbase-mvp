@@ -7,4 +7,5 @@ node_modules
 !.env.production.example
 *.tsbuildinfo
 next-env.d.ts
-eval/results/
+apps/web/eval/results/
+.turbo

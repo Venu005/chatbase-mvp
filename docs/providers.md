@@ -103,6 +103,6 @@ chosen size with `EMBEDDING_SEND_DIMENSIONS=true`.
 
 ## Adding another provider
 
-Implement `LLMProvider` (or `EmbeddingProvider`) from `src/lib/providers/types.ts`, register it in
-`src/lib/providers/index.ts`, and add its variables to `.env.example`, `docs/setup.md` and `scripts/preflight.mjs`.
-`src/lib/providers/sarvam.ts` is a compact example of a provider with its own auth header and reply clean-up.
+Implement `LLMProvider` (or `EmbeddingProvider`) from `packages/core/src/providers/types.ts`, register it in
+`packages/core/src/providers/index.ts`, and add its variables to `.env.example`, `docs/setup.md` and `apps/web/scripts/preflight.mjs`.
+`packages/core/src/providers/sarvam.ts` is a compact example of a provider with its own auth header and reply clean-up.

@@ -1,14 +1,44 @@
-# Admin view
+# Admin app
 
-A platform-operator dashboard at **`/admin`**: every account, every AI call, what it cost and what went wrong.
+A separate platform-operator dashboard (`apps/admin`): every account, every AI call, what it cost and what went wrong. It
+runs on its own port (3001 locally) with its own sign-in, apart from the customer app, so you can put it on its own
+address (for example `admin.yourdomain.in`) and restrict who can reach it at your proxy.
 
 ## Access
 
-List the operators' e-mails in `ADMIN_EMAILS` (comma-separated) and restart the app. Those accounts see an **Admin** link in
-the top bar. Everyone else gets a plain 404 on `/admin` and `/api/admin/*`, so the area isn't advertised.
+Admins are **not** customer accounts. They sign in at the admin app's `/login`, and their sessions don't work in the
+customer app (and customer sessions don't work here).
 
-The admin view shows customers' questions and the assistant's answers (in the answer traces). Limit `ADMIN_EMAILS` to people
-who need it, and mention this processing in your privacy policy.
+**The first admins** come from the environment:
+
+```
+ADMIN_EMAILS=you@yourcompany.in, cofounder@yourcompany.in
+ADMIN_PASSWORD=REPLACE_ME_with_output_of_openssl_rand_base64_24    # 12+ characters
+ADMIN_URL=https://admin.yourdomain.in                              # https turns on secure cookies
+```
+
+Each `ADMIN_EMAILS` address signs in with `ADMIN_PASSWORD`. Removing an address from `ADMIN_EMAILS` (or blanking
+`ADMIN_PASSWORD`) and restarting ends that access, unless that admin also set their own password.
+
+**More admins** are added in the app: open the **Admins** tab, enter their e-mail, name and a first password (12+
+characters), and share the password with them privately. Every admin can add and remove admins, except that nobody can
+remove themselves and `ADMIN_EMAILS` admins are managed in the environment only. A removed admin is signed out at once.
+Passwords are stored as bcrypt hashes in the `admins` table. Any admin can change their own password in the same tab,
+which signs out their other sessions.
+
+The same actions as API calls (signed in as an admin):
+
+| Call | Does |
+| --- | --- |
+| `GET /api/admin/admins` | list admins (including `ADMIN_EMAILS` entries that haven't signed in yet) |
+| `POST /api/admin/admins` `{ email, name?, password }` | add an admin (409 if the e-mail already is one) |
+| `DELETE /api/admin/admins/{id}` | remove an admin |
+| `POST /api/admin/me/password` `{ currentPassword, newPassword }` | change your own password |
+
+Sign-in attempts are rate-limited per IP address. Admin sessions last 12 hours.
+
+The admin app shows customers' questions and the assistant's answers (in the answer traces). Keep the list of admins to
+people who need it, and mention this processing in your privacy policy.
 
 ## What it shows
 
@@ -43,6 +73,6 @@ without a price shows "no price". Mock models cost nothing.
 
 Vectors from different embedding models can't be compared, so every passage records the model that made it and search only
 uses the current model's passages. After changing `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` (and `EMBEDDING_DIM`, which needs
-a fresh column), open **Models & ingestion** and press **Re-index**: websites are read again, files and pasted text are
+a fresh column), open **Models & ingestion** and press **Re-index** (the customer app's ingestion worker does the work): websites are read again, files and pasted text are
 re-embedded from the content kept when they were added, and Q&A answers are re-embedded. Sources added before content was
 kept are listed so their owners can re-add them.

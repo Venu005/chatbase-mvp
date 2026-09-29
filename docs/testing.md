@@ -12,7 +12,10 @@ pnpm test
 
 ## End-to-end smoke tests
 
-They need Postgres migrated, and a production build of the app running with the mock models.
+They need Postgres migrated, and a production build of both apps running with the mock models (`pnpm start` starts the
+customer app on 3000 and the admin app on 3001). `smoke:ai` and `smoke:admin` sign in to the admin app as the first
+`ADMIN_EMAILS` entry with `ADMIN_PASSWORD`, so put both in `.env` (for example `ADMIN_EMAILS=admin@smoke.test` and
+`ADMIN_PASSWORD=smoke-admin-password`).
 
 ```bash
 pnpm build
@@ -22,7 +25,6 @@ LLM_FIRST_TOKEN_TIMEOUT_MS=2000 LLM_FALLBACK_PROVIDER=mock LLM_FALLBACK_MODEL=ba
 LLM_SMALL_PROVIDER=mock LLM_SMALL_MODEL=small \
 OCR_PROVIDER=openai OCR_MODEL=fake-vision OCR_API_KEY=ocr-test OCR_BASE_URL=http://127.0.0.1:4060/v1 \
 'PRERENDER_URL=http://127.0.0.1:4060/render?url={url}' \
-ADMIN_EMAILS=admin@smoke.test \
 WHATSAPP_GRAPH_BASE_URL=http://127.0.0.1:4020 \
 SARVAM_API_KEY=sarvam-test-key SARVAM_STT_URL=http://127.0.0.1:4020/speech-to-text \
 SMTP_URL=smtp://127.0.0.1:4025 EMAIL_FROM="Bot <bot@example.com>" \
@@ -35,6 +37,7 @@ pnpm start
 # terminal 2
 pnpm smoke             # accounts, ingestion, RAG answers, isolation, limits, widget, rate limits
 pnpm smoke:ai          # AI pipeline: retries, timeouts, backup model, usage and cost records, admin view
+pnpm smoke:admin       # admin app: sign-in, adding and removing admins, password changes, separate sessions
 pnpm smoke:features    # 👍/👎 feedback, Q&A answers, analytics, lead capture and CSV
 pnpm smoke:account     # password reset e-mails and links, allowed websites for the widget
 pnpm smoke:whatsapp    # manual WhatsApp connection, webhook signatures, dedupe, replies, credits

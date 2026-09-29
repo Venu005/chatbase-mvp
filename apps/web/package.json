@@ -1,0 +1,41 @@
+{
+  "name": "@chatbase/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The customer app: sign-up, agent builder, chat widget, WhatsApp, billing.",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "preflight": "node --env-file-if-exists=../../.env scripts/preflight.mjs",
+    "smoke": "node scripts/smoke-test.mjs",
+    "smoke:whatsapp": "node --env-file-if-exists=../../.env scripts/smoke-whatsapp.mjs",
+    "smoke:handoff": "node --env-file-if-exists=../../.env scripts/smoke-handoff.mjs",
+    "smoke:account": "node --env-file-if-exists=../../.env scripts/smoke-account.mjs",
+    "smoke:features": "node --env-file-if-exists=../../.env scripts/smoke-features.mjs",
+    "smoke:ai": "node --env-file-if-exists=../../.env scripts/smoke-ai.mjs",
+    "smoke:embedded": "node --env-file-if-exists=../../.env scripts/smoke-embedded.mjs",
+    "smoke:sarvam": "node --env-file-if-exists=../../.env scripts/smoke-sarvam.mjs",
+    "smoke:billing": "node --env-file-if-exists=../../.env scripts/smoke-billing.mjs",
+    "eval": "node --env-file-if-exists=../../.env node_modules/tsx/dist/cli.mjs scripts/eval.ts",
+    "razorpay:setup": "node --experimental-strip-types --disable-warning=ExperimentalWarning --env-file-if-exists=../../.env scripts/razorpay-setup.mjs"
+  },
+  "dependencies": {
+    "@chatbase/core": "workspace:*",
+    "@chatbase/ui": "workspace:*",
+    "next": "^15.5.25",
+    "nodemailer": "^10.0.10",
+    "pg": "^8.23.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
