@@ -1,0 +1,60 @@
+{
+  "name": "Sharma Kirana (grocery shop, Bengaluru)",
+  "instructions": "You help customers of Sharma Kirana, a grocery shop in Indiranagar, Bengaluru. Be brief and friendly.",
+  "sources": [
+    {
+      "title": "Store information",
+      "text": "Sharma Kirana is a grocery store at 12 CMH Road, Indiranagar, Bengaluru 560038.\n\nOpening hours: 7am to 10pm every day, including Sundays and public holidays. On Diwali we close at 6pm.\n\nContact: call or WhatsApp +91 98450 12345. Email: orders@sharmakirana.in.\n\nHome delivery: we deliver to Indiranagar, Domlur, HAL 2nd Stage and Jeevan Bima Nagar. Delivery usually takes 2 hours. Orders placed after 8pm are delivered the next morning. We do not deliver to Whitefield or Electronic City."
+    },
+    {
+      "title": "Price list",
+      "text": "Price list (September 2026). All prices include GST.\n\nAashirvaad Whole Wheat Atta 5 kg (code AA-5K): ₹265.\nAashirvaad Whole Wheat Atta 10 kg (code AA-10K): ₹510.\nIndia Gate Basmati Rice 1 kg (code IG-1K): ₹189.\nFortune Sunflower Oil 1 litre (code FS-1L): ₹145.\nAmul Butter 500 g (code AM-B500): ₹285.\nAmul Taaza Milk 1 litre (code AM-T1L): ₹56.\nTata Salt 1 kg (code TS-1K): ₹28.\nToor Dal 1 kg (code TD-1K): ₹172.\nMaggi 2-Minute Noodles pack of 12 (code MG-12): ₹168.\nSurf Excel Easy Wash 1 kg (code SE-1K): ₹130."
+    },
+    {
+      "title": "Policies",
+      "text": "Delivery charges: free delivery on orders of ₹300 or more. Orders below ₹300 have a delivery charge of ₹30.\n\nPayment: we accept UPI (Google Pay, PhonePe, Paytm), debit and credit cards, and cash on delivery. Cash on delivery is available for orders up to ₹2,000.\n\nReturns: packaged items can be returned within 7 days of delivery if unopened. Fresh milk, vegetables and fruits cannot be returned but damaged items are replaced the same day.\n\nRefunds: refunds are credited to the original payment method within 5 working days. Cash on delivery refunds are sent by UPI."
+    },
+    {
+      "title": "हिंदी जानकारी",
+      "text": "डिलीवरी: हम इंदिरानगर और डोमलूर में दो घंटे में होम डिलीवरी करते हैं।\n\nभुगतान: आप यूपीआई, कार्ड या कैश ऑन डिलीवरी से भुगतान कर सकते हैं।\n\nवापसी: बिना खुला पैकेट वाला सामान डिलीवरी के सात दिनों के भीतर वापस किया जा सकता है।"
+    },
+    {
+      "title": "Offers",
+      "text": "This month's offers: 10% off on all Tata products every Wednesday. Buy 2 Maggi 12-packs and get 1 Tata Salt 1 kg free. New customers get ₹50 off their first order above ₹500 with the code WELCOME50."
+    }
+  ],
+  "cases": [
+    { "id": "timings-en", "category": "direct", "lang": "en", "question": "What are your opening hours?", "expect": { "passage": "7am to 10pm", "answer": ["7am", "7 am", "10pm", "10 pm"] } },
+    { "id": "sunday", "category": "paraphrase", "lang": "en", "question": "Are you open on Sundays?", "expect": { "passage": "including Sundays", "answer": ["yes", "open"] } },
+    { "id": "diwali", "category": "direct", "lang": "en", "question": "What time do you close on Diwali?", "expect": { "passage": "Diwali we close at 6pm", "answer": ["6pm", "6 pm"] } },
+    { "id": "address", "category": "paraphrase", "lang": "en", "question": "Where is the shop located?", "expect": { "passage": "12 CMH Road", "answer": ["CMH Road", "Indiranagar"] } },
+    { "id": "phone", "category": "paraphrase", "lang": "en", "question": "How can I contact you?", "expect": { "passage": "98450 12345", "answer": ["98450", "orders@sharmakirana.in"] } },
+    { "id": "delivery-area", "category": "direct", "lang": "en", "question": "Do you deliver to Domlur?", "expect": { "passage": "Domlur", "answer": ["yes", "Domlur"] } },
+    { "id": "no-whitefield", "category": "direct", "lang": "en", "question": "Can you deliver to Whitefield?", "expect": { "passage": "do not deliver to Whitefield", "answer": ["no", "not", "don't", "do not"] } },
+    { "id": "delivery-time", "category": "paraphrase", "lang": "en", "question": "How long will my order take to arrive?", "expect": { "passage": "2 hours", "answer": ["2 hours", "two hours"] } },
+    { "id": "late-order", "category": "paraphrase", "lang": "en", "question": "If I order at 9 at night when will it come?", "expect": { "passage": "after 8pm are delivered the next morning", "answer": ["next morning", "tomorrow"] } },
+    { "id": "free-delivery", "category": "paraphrase", "lang": "en", "question": "What's the minimum order for free delivery?", "expect": { "passage": "₹300 or more", "answer": ["300"] } },
+    { "id": "cod-limit", "category": "direct", "lang": "en", "question": "Is there a limit for cash on delivery?", "expect": { "passage": "up to ₹2,000", "answer": ["2,000", "2000"] } },
+    { "id": "returns", "category": "paraphrase", "lang": "en", "question": "Can I send back a packet I didn't open?", "expect": { "passage": "returned within 7 days", "answer": ["7 days", "seven days"] } },
+    { "id": "milk-return", "category": "paraphrase", "lang": "en", "question": "Can I return milk?", "expect": { "passage": "Fresh milk, vegetables and fruits cannot be returned", "answer": ["cannot", "can't", "not", "no"] } },
+    { "id": "refund-time", "category": "direct", "lang": "en", "question": "How long do refunds take?", "expect": { "passage": "within 5 working days", "answer": ["5 working days", "five working days", "5 days"] } },
+    { "id": "sku-atta", "category": "sku", "lang": "en", "question": "Price of AA-5K?", "expect": { "passage": "AA-5K", "answer": ["265"] } },
+    { "id": "sku-butter", "category": "sku", "lang": "en", "question": "How much is AM-B500?", "expect": { "passage": "AM-B500", "answer": ["285"] } },
+    { "id": "product-rice", "category": "product", "lang": "en", "question": "How much does the India Gate basmati rice cost?", "expect": { "passage": "IG-1K", "answer": ["189"] } },
+    { "id": "product-oil", "category": "product", "lang": "en", "question": "sunflower oil price", "expect": { "passage": "FS-1L", "answer": ["145"] } },
+    { "id": "followup-10kg", "category": "followup", "lang": "en", "history": ["How much is the Aashirvaad atta 5 kg?"], "question": "And the 10 kg one?", "expect": { "passage": "AA-10K", "answer": ["510"] } },
+    { "id": "followup-cod", "category": "followup", "lang": "en", "history": ["Do you accept UPI?"], "question": "What about cash?", "expect": { "passage": "cash on delivery", "answer": ["cash on delivery", "COD", "yes"] } },
+    { "id": "offer-code", "category": "direct", "lang": "en", "question": "Is there a discount code for new customers?", "expect": { "passage": "WELCOME50", "answer": ["WELCOME50"] } },
+    { "id": "offer-wed", "category": "paraphrase", "lang": "en", "question": "Any deals on Tata stuff?", "expect": { "passage": "10% off on all Tata products", "answer": ["10%", "Wednesday"] } },
+    { "id": "hinglish-atta", "category": "hinglish", "lang": "hinglish", "question": "atta ka rate kya hai?", "expect": { "passage": "AA-5K", "answer": ["265"] } },
+    { "id": "hinglish-cod", "category": "hinglish", "lang": "hinglish", "question": "COD milta hai kya?", "expect": { "passage": "cash on delivery", "answer": ["haan", "yes", "cash on delivery", "COD", "milta"] } },
+    { "id": "hinglish-time", "category": "hinglish", "lang": "hinglish", "question": "dukaan kitne baje khulti hai?", "expect": { "passage": "7am to 10pm", "answer": ["7"] } },
+    { "id": "hinglish-delivery", "category": "hinglish", "lang": "hinglish", "question": "delivery kitne time mein hogi?", "expect": { "passage": "2 hours", "answer": ["2", "do ghante", "two"] } },
+    { "id": "hindi-delivery", "category": "hindi", "lang": "hi", "question": "डिलीवरी में कितना समय लगता है?", "expect": { "passage": "दो घंटे", "answer": ["दो घंटे", "2 घंटे"] } },
+    { "id": "hindi-return", "category": "hindi", "lang": "hi", "question": "क्या मैं सामान वापस कर सकता हूँ?", "expect": { "passage": "सात दिनों", "answer": ["सात दिन", "7 दिन"] } },
+    { "id": "oos-iphone", "category": "out_of_scope", "lang": "en", "question": "Do you sell iPhones?", "expect": { "refuse": true, "notAnswer": ["yes, we sell"] } },
+    { "id": "oos-weather", "category": "out_of_scope", "lang": "en", "question": "What will the weather be like tomorrow?", "expect": { "refuse": true } },
+    { "id": "oos-pizza", "category": "out_of_scope", "lang": "en", "question": "Can you recommend a good pizza place nearby?", "expect": { "refuse": true } },
+    { "id": "oos-hinglish", "category": "out_of_scope", "lang": "hinglish", "question": "aapke paas petrol milta hai?", "expect": { "refuse": true } }
+  ]
+}

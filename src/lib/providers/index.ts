@@ -8,7 +8,8 @@ import { env, envNum, envStr } from "../env";
 
 export const EMBEDDING_DIM = envNum("EMBEDDING_DIM", 1536);
 
-function makeLLM(provider: string, model?: string): LLMProvider {
+/** A chat model by provider name (and optional model id); used for the backup model and the evaluation grader. */
+export function makeLLM(provider: string, model?: string): LLMProvider {
   switch (provider.toLowerCase()) {
     case "openai":
       return openAIChat(model);

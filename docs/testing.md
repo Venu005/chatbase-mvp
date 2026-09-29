@@ -43,3 +43,31 @@ pnpm smoke:sarvam      # Sarvam provider (starts its own app copy on port 3010; 
 
 Run them against a scratch database, not production. They create accounts and agents with random names.
 `ALLOW_PRIVATE_URLS=true` in your `.env` additionally lets `pnpm smoke` test website crawling against a local page.
+
+## Answer-quality evaluation
+
+`pnpm eval` runs a dataset of real customer questions through the actual answer pipeline (retrieval, prompt, model, retries)
+with the models in your `.env`, and scores it. It needs only the database, not a running server: it creates a temporary
+account and agent, indexes the dataset's sources, asks every question as a new visitor, then deletes the account.
+
+```bash
+pnpm eval                            # eval/datasets/kirana.json: 32 questions in English, Hindi and Hinglish
+pnpm eval -- --save-baseline         # remember these scores for this dataset + model combination
+pnpm eval -- --check                 # exit 1 if any rate is >5 points below the baseline (use in CI)
+pnpm eval -- --judge                 # also grade groundedness with EVAL_JUDGE_PROVIDER / EVAL_JUDGE_MODEL
+pnpm eval -- --only sku,hinglish     # only some categories (or question ids)
+```
+
+| Score | Meaning |
+| --- | --- |
+| hit@k, top1, MRR | The passage that holds the answer was among those given to the model (top1: it came first) |
+| answer | The reply contains an expected fact (a price, a time...) and doesn't decline |
+| refuse | For questions the sources don't cover, the assistant says it doesn't know instead of inventing |
+| lang | The reply uses the customer's script (Devanagari for Hindi, Latin for English and Hinglish) |
+| grounded | (`--judge`) A grader model found no claims the passages don't support |
+
+Results are printed by category (direct, paraphrase, product code, product, follow-up, Hinglish, Hindi, out of scope) and
+saved to `eval/results/`. Baselines live in `eval/baselines/`, one per dataset and model combination. **Only numbers from real
+models mean anything**: the mock embeddings match shared words, so paraphrases and Hinglish fail by design. Run it with your
+production models before and after every prompt, retrieval or model change, and add your customers' real questions to a
+dataset of your own (same JSON format).

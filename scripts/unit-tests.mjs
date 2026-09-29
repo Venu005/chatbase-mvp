@@ -11,6 +11,7 @@ import { normalizeTurns, trimHistory } from "../src/lib/providers/turns.ts";
 import { newRun, resilientStream, withRetries } from "../src/lib/providers/resilient.ts";
 import { ProviderError } from "../src/lib/providers/types.ts";
 import { costUsd, embeddingCostUsd, parsePrices } from "../src/lib/pricing.ts";
+import { containsAny, isRefusal, normalize, percentile, rankOf, regressions, script } from "../src/lib/eval-score.ts";
 import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
 import { csvCell, normalizeEmail, normalizePhone, parseContact, toCsv } from "../src/lib/leads.ts";
@@ -328,4 +329,19 @@ test("pricing: LLM_PRICES parsing and cost per call", () => {
   assert.equal(costUsd(prices, "mock", "mock", 1000, 1000), 0);
   assert.equal(embeddingCostUsd(0.02, "openai-compatible", 1_000_000), 0.02);
   assert.equal(embeddingCostUsd(undefined, "openai-compatible", 10), null);
+});
+
+test("eval scoring: normalising, refusals, scripts, ranks, regressions", () => {
+  assert.equal(normalize("  Up to ₹2,000  per  Order "), "up to ₹2000 per order");
+  assert.ok(containsAny("COD is available up to ₹2000", ["2,000"]));
+  assert.ok(!containsAny("We open at 7am", ["10pm"]));
+  for (const t of ["I don't have information about that.", "Sorry, please contact the store.", "मुझे इसकी जानकारी नहीं है", "iske baare mein nahi pata"]) assert.ok(isRefusal(t), t);
+  assert.ok(!isRefusal("Yes, we deliver to Domlur in 2 hours."));
+  assert.equal(script("हम दो घंटे में डिलीवरी करते हैं (2 hours)"), "devanagari");
+  assert.equal(script("haan, COD milta hai"), "latin");
+  assert.equal(rankOf(["a", "Price AA-5K ₹265", "x"], "aa-5k"), 2);
+  assert.equal(rankOf(["a"], "zzz"), 0);
+  assert.equal(percentile([5, 1, 3, 2, 4], 50), 3);
+  assert.equal(percentile([5, 1, 3, 2, 4], 95), 5);
+  assert.deepEqual(regressions({ answer_rate: 0.7, retrieval_hit_rate: 0.9, avg_tokens: 900 }, { answer_rate: 0.8, retrieval_hit_rate: 0.92, avg_tokens: 100 }), ["answer_rate: 80.0% → 70.0%"]);
 });
