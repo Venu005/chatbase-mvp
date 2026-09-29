@@ -10,6 +10,7 @@ import { createThinkFilter } from "../src/lib/providers/think.ts";
 import { normalizeTurns, trimHistory } from "../src/lib/providers/turns.ts";
 import { newRun, resilientStream, withRetries } from "../src/lib/providers/resilient.ts";
 import { ProviderError } from "../src/lib/providers/types.ts";
+import { costUsd, embeddingCostUsd, parsePrices } from "../src/lib/pricing.ts";
 import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
 import { csvCell, normalizeEmail, normalizePhone, parseContact, toCsv } from "../src/lib/leads.ts";
@@ -316,4 +317,15 @@ test("withRetries: retries retryable errors only", async () => {
   let m = 0;
   await assert.rejects(withRetries(async () => (m++, Promise.reject(new ProviderError("400", 400))), { baseMs: 1 }), /400/);
   assert.equal(m, 1);
+});
+
+test("pricing: LLM_PRICES parsing and cost per call", () => {
+  const prices = parsePrices("gpt-4.1-mini=0.40/1.60, Claude-Haiku-4-5 = 1/5, junk, x=1");
+  assert.equal(prices.size, 2);
+  assert.equal(costUsd(prices, "openai-compatible", "gpt-4.1-mini", 1_000_000, 500_000), 1.2);
+  assert.equal(costUsd(prices, "anthropic", "claude-haiku-4-5", 2000, 300), 0.0035);
+  assert.equal(costUsd(prices, "anthropic", "unknown-model", 1000, 1000), null, "no price configured");
+  assert.equal(costUsd(prices, "mock", "mock", 1000, 1000), 0);
+  assert.equal(embeddingCostUsd(0.02, "openai-compatible", 1_000_000), 0.02);
+  assert.equal(embeddingCostUsd(undefined, "openai-compatible", 10), null);
 });

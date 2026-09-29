@@ -4,7 +4,8 @@ import * as cheerio from "cheerio";
 import { extractText, getDocumentProxy } from "unpdf";
 import { q, toVector } from "./db";
 import { chunkText, normalizeText } from "./chunk";
-import { embedAll } from "./providers";
+import { embedAll, getEmbedder } from "./providers";
+import { recordIngest } from "./ai-log";
 
 export type Doc = { title: string; url: string | null; text: string };
 
@@ -172,7 +173,17 @@ export async function indexDocs(sourceId: string, agentId: string, docs: Doc[]):
     if (!pieces.length) throw new Error("No readable text found in this source");
     if (pieces.length > 5000) throw new Error("Source is too large (more than 5,000 chunks)");
 
-    const vectors = await embedAll(pieces.map((p) => p.content));
+    const embedder = getEmbedder();
+    const embedChars = pieces.reduce((n, p) => n + p.content.length, 0);
+    const t0 = Date.now();
+    let vectors: number[][];
+    try {
+      vectors = await embedAll(pieces.map((p) => p.content));
+    } catch (e) {
+      await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "error", error: (e as Error).message });
+      throw e;
+    }
+    await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "ok" });
 
     const BATCH = 100;
     for (let i = 0; i < pieces.length; i += BATCH) {

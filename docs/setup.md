@@ -75,6 +75,9 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `EMBEDDING_DIM` | `1536` | Vector size of the model. **Fixed when you first run `pnpm migrate`.** |
 | `EMBEDDING_SEND_DIMENSIONS` | `false` | `true` for models that accept a `dimensions` parameter. |
 | `RETRIEVAL_TOP_K` | `6` | How many passages are given to the model per question. |
+| `LLM_PRICES` | none | USD per million input/output tokens by model id, e.g. `gpt-4.1-mini=0.40/1.60, claude-haiku-4-5=1/5`. Used for cost tracking; models without a price show tokens only. |
+| `EMBEDDING_PRICE_PER_MTOK` | none | USD per million embedded tokens. |
+| `USD_INR_RATE` | none | Also show costs in rupees in the admin view. |
 | `LLM_FIRST_TOKEN_TIMEOUT_MS`, `LLM_TIMEOUT_MS` | `20000`, `90000` | Time limits for the first word of an answer and for the whole answer. |
 | `LLM_RETRIES` | `2` | Retries (with backoff) for rate limits, overload, server errors and timeouts, only before any text reaches the customer. |
 | `LLM_FALLBACK_PROVIDER`, `LLM_FALLBACK_MODEL` | off | Backup model used when the main one keeps failing (for example `openai` with a small model). |

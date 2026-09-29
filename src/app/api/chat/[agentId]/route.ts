@@ -5,6 +5,7 @@ import { getUser } from "@/lib/auth";
 import { q1 } from "@/lib/db";
 import { loadAgent, prepareAnswer, saveAnswer, streamAnswer, usedCitations } from "@/lib/answer";
 import { newRun } from "@/lib/providers/resilient";
+import { recordAnswer } from "@/lib/ai-log";
 import { refundCredit } from "@/lib/usage";
 
 export const runtime = "nodejs";
@@ -66,6 +67,8 @@ export const POST = handle<Ctx>(async (req, { params }) => {
       let answer = "";
       let failed = false;
       let saved = false;
+      let messageId: number | null = null;
+      let error: unknown = null;
       try {
         for await (const delta of streamAnswer(prepared, run, abort.signal)) {
           answer += delta;
@@ -73,15 +76,17 @@ export const POST = handle<Ctx>(async (req, { params }) => {
         }
         if (!answer.trim()) throw new Error("The model returned an empty reply");
         saved = true;
-        const messageId = await saveAnswer(prepared, answer).catch((e) => (console.error("Saving reply failed:", e), null));
+        messageId = await saveAnswer(prepared, answer).catch((e) => (console.error("Saving reply failed:", e), null));
         controller.enqueue(line({ type: "done", citations: usedCitations(answer, prepared), conversationId: prepared.conversationId, messageId }));
       } catch (e) {
+        error = abort.signal.aborted ? new Error("The visitor closed the chat before the answer finished") : e;
         failed = !answer;
         console.error("Chat generation failed:", e);
         if (!abort.signal.aborted) controller.enqueue(line({ type: "error", message: "Sorry, I couldn't answer that right now. Please try again." }));
       } finally {
-        if (!saved && answer.trim()) await saveAnswer(prepared, answer).catch((e) => console.error("Saving reply failed:", e)); // partial answer (client left or stream broke)
+        if (!saved && answer.trim()) messageId = await saveAnswer(prepared, answer).catch((e) => (console.error("Saving reply failed:", e), null)); // partial answer (client left or stream broke)
         if (failed) await refundCredit(agent.user_id).catch(() => {});
+        await recordAnswer(prepared, run, { status: !error ? "ok" : answer.trim() ? "partial" : "error", messageId, error, answer });
         try {
           controller.close();
         } catch {

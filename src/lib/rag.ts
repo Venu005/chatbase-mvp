@@ -13,6 +13,9 @@ export type Retrieved = {
 
 export type Citation = { n: number; title: string; url: string | null };
 
+/** Bump when the system prompt changes meaningfully: stored with every answer so quality changes can be traced. */
+export const PROMPT_VERSION = "2026-09-29.1";
+
 /** An owner-written Q&A pair ("Fix this answer") that matched the visitor's question. */
 export type FixMatch = { id: string; question: string; answer: string; score: number };
 

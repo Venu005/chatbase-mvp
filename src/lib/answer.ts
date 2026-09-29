@@ -3,9 +3,10 @@ import { HttpError } from "./http";
 import { getFallbackLLM, getLLM } from "./providers";
 import { newRun, resilientStream, type Run } from "./providers/resilient";
 import { trimHistory } from "./providers/turns";
+import { recordAnswer } from "./ai-log";
 import { envNum } from "./env";
 import type { ChatMessage } from "./providers/types";
-import { buildSystemPrompt, retrieveKnowledge, toCitations, type Citation } from "./rag";
+import { PROMPT_VERSION, buildSystemPrompt, retrieveKnowledge, toCitations, type Citation } from "./rag";
 import { refundCredit, reserveCredit } from "./usage";
 import { wantsHuman } from "./handoff-intent";
 import { findConversation, recordVisitorMessage, startHandoff } from "./handoff";
@@ -39,6 +40,14 @@ export async function loadAgent(agentId: string): Promise<AnswerAgent | null> {
 
 export type Prepared = {
   conversationId: string;
+  agentId: string;
+  userId: string;
+  channel: Channel;
+  question: string;
+  promptVersion: string;
+  /** What retrieval found, kept for the answer trace. */
+  retrieved: { chunkId: number; score: number; title: string; url: string | null }[];
+  fixes: { id: string; score: number; question: string }[];
   system: string;
   history: ChatMessage[];
   citations: Citation[];
@@ -99,6 +108,13 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
     await q("INSERT INTO messages (conversation_id, role, content) VALUES ($1,'user',$2)", [conversationId, message]);
     return {
       conversationId,
+      agentId: agent.id,
+      userId: agent.user_id,
+      channel,
+      question: message,
+      promptVersion: PROMPT_VERSION,
+      retrieved: chunks.map((c) => ({ chunkId: Number(c.id), score: Math.round(c.score * 1000) / 1000, title: c.page_title || c.source_title, url: c.page_url })),
+      fixes: fixes.map((f) => ({ id: f.id, score: Math.round(f.score * 1000) / 1000, question: f.question })),
       system: buildSystemPrompt(agent, chunks, { canHandoff: agent.handoff_enabled && channel !== "playground", fixes }),
       history,
       citations: toCitations(chunks),
@@ -149,9 +165,12 @@ export async function answerOnce(
     for await (const delta of streamAnswer(p, run)) text += delta;
     if (!text.trim()) throw new Error("The model returned an empty reply");
   } catch (e) {
+    // WhatsApp sends the reply in one piece, so a half-written answer is never sent: it's an error, credit refunded.
     await refundCredit(agent.user_id).catch(() => {});
+    await recordAnswer(p, run, { status: "error", error: e, answer: text });
     throw e;
   }
-  await saveAnswer(p, text).catch((e) => console.error("Saving reply failed:", e));
+  const messageId = await saveAnswer(p, text).catch((e) => (console.error("Saving reply failed:", e), null));
+  await recordAnswer(p, run, { status: "ok", messageId });
   return { text, citations: usedCitations(text, p) };
 }
