@@ -12,6 +12,7 @@ import { newRun, resilientStream, withRetries } from "../src/lib/providers/resil
 import { ProviderError } from "../src/lib/providers/types.ts";
 import { costUsd, embeddingCostUsd, parsePrices } from "../src/lib/pricing.ts";
 import { containsAny, isRefusal, normalize, percentile, rankOf, regressions, script } from "../src/lib/eval-score.ts";
+import { fuse, keywordCoverage, keywordQuery, keywordTerms } from "../src/lib/keywords.ts";
 import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
 import { csvCell, normalizeEmail, normalizePhone, parseContact, toCsv } from "../src/lib/leads.ts";
@@ -344,4 +345,27 @@ test("eval scoring: normalising, refusals, scripts, ranks, regressions", () => {
   assert.equal(percentile([5, 1, 3, 2, 4], 50), 3);
   assert.equal(percentile([5, 1, 3, 2, 4], 95), 5);
   assert.deepEqual(regressions({ answer_rate: 0.7, retrieval_hit_rate: 0.9, avg_tokens: 900 }, { answer_rate: 0.8, retrieval_hit_rate: 0.92, avg_tokens: 100 }), ["answer_rate: 80.0% → 70.0%"]);
+});
+
+test("keywords: terms, Hinglish equivalents, product codes and Hindi; tsquery building", () => {
+  assert.deepEqual(keywordTerms("How much is AM-B500?"), ["am-b500"]);
+  assert.deepEqual(keywordTerms("atta ka rate kya hai?"), ["atta", "rate", "price"]);
+  assert.deepEqual(keywordTerms("डिलीवरी में कितना समय लगता है?"), ["डिलीवरी", "समय", "लगता"]);
+  assert.equal(keywordQuery("What is the?"), null, "only filler words: no keyword search");
+  assert.equal(keywordQuery("sunday AA-5K it's"), "'sunday':* | 'aa-5k'", "filler and one-letter words are dropped");
+});
+
+test("keywordCoverage: keyword-only matches need a real share of the question's words", () => {
+  const prices = "Aashirvaad Whole Wheat Atta 5 kg (code AA-5K): ₹265. Price list";
+  assert.equal(keywordCoverage("atta ka rate kya hai", prices), 1);
+  assert.equal(keywordCoverage("price of aa-5k?", prices), 1);
+  assert.ok(keywordCoverage("recommend a good pizza place nearby", "Orders placed after 8pm are delivered the next morning.") < 0.5);
+  assert.equal(keywordCoverage("sunday timings", "Open every day, including Sundays"), 0.5, "prefix match: sunday ~ Sundays");
+});
+
+test("fuse (reciprocal rank fusion): agreement between lists wins", () => {
+  const r = fuse([["a", "b", "c"], ["c", "d"]], (x) => x);
+  assert.equal(r[0].item, "c", "c is in both lists");
+  assert.deepEqual(r[0].in, [0, 1]);
+  assert.deepEqual(r.map((x) => x.item).sort(), ["a", "b", "c", "d"]);
 });

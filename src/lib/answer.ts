@@ -46,7 +46,7 @@ export type Prepared = {
   question: string;
   promptVersion: string;
   /** What retrieval found, kept for the answer trace. */
-  retrieved: { chunkId: number; score: number; title: string; url: string | null }[];
+  retrieved: { chunkId: number; score: number; title: string; url: string | null; via?: string }[];
   fixes: { id: string; score: number; question: string }[];
   system: string;
   history: ChatMessage[];
@@ -113,7 +113,7 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
       channel,
       question: message,
       promptVersion: PROMPT_VERSION,
-      retrieved: chunks.map((c) => ({ chunkId: Number(c.id), score: Math.round(c.score * 1000) / 1000, title: c.page_title || c.source_title, url: c.page_url })),
+      retrieved: chunks.map((c) => ({ chunkId: Number(c.id), score: Math.round(c.score * 1000) / 1000, title: c.page_title || c.source_title, url: c.page_url, via: c.via })),
       fixes: fixes.map((f) => ({ id: f.id, score: Math.round(f.score * 1000) / 1000, question: f.question })),
       system: buildSystemPrompt(agent, chunks, { canHandoff: agent.handoff_enabled && channel !== "playground", fixes }),
       history,
