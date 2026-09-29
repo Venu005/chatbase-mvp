@@ -89,6 +89,7 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `HISTORY_MAX_CHARS` | `6000` | How much of the conversation (newest first) is sent with each question. |
 | `EMBEDDING_TIMEOUT_MS`, `EMBEDDING_RETRIES` | `30000`, `3` | Time limit and retries for embedding calls. |
 | `RETRIEVAL_MIN_SCORE` | `0.2` (`0.1` in `.env.example`) | Passages scoring below this similarity are ignored. Tune per embedding model. |
+| `CHUNK_SIZE`, `CHUNK_OVERLAP` | `900`, `120` | Passage size and overlap in characters, for newly indexed sources. Tune with `pnpm eval`. |
 | `HYBRID_SEARCH` | on | Keyword search next to meaning search, merged by rank (product codes, names, prices, Hindi and Hinglish words). `off` = meaning only. |
 | `KEYWORD_MIN_COVERAGE` | `0.5` | A passage found only by keywords must contain this share of the question's meaningful words. |
 | `ANSWER_FIX_MIN_SCORE` | `0.5` | How similar a visitor's question must be to a Q&A answer's question for the owner's answer to be used. Raise it if Q&A answers show up for unrelated questions. |

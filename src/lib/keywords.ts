@@ -9,7 +9,7 @@
 
 const STOP = new Set(
   (
-    "a about an and any are as at be by can could do does for from get got have how i if in is it its like many me much my of on or our please some " +
+    "a about an and any are as at be by can could do does for from get got have how i if in is it its like long many me much my of on or our please some take takes " +
     "so tell than that the their them there this to u us was we what when where which who will with would you your " +
     "hai hain kya ka ki ke ko se mein me main mai hum aap aapke aapka apna bhi to toh na nahi ho hota hoti tha thi " +
     "kaise kaisa kitna kitne kitni kab kahan kya kyun yeh ye woh wo koi kuch aur ya " +

@@ -4,6 +4,7 @@ import * as cheerio from "cheerio";
 import { extractText, getDocumentProxy } from "unpdf";
 import { toVector, tx } from "./db";
 import { chunkText, normalizeText } from "./chunk";
+import { envNum } from "./env";
 import { embedAll, embeddingModelId, getEmbedder } from "./providers";
 import { recordIngest } from "./ai-log";
 
@@ -168,7 +169,7 @@ export async function writeChunks(sourceId: string, agentId: string, docs: Doc[]
   let chars = 0;
   for (const d of docs) {
     chars += d.text.length;
-    for (const content of chunkText(d.text)) pieces.push({ title: d.title, url: d.url, content });
+    for (const content of chunkText(d.text, envNum("CHUNK_SIZE", 900), envNum("CHUNK_OVERLAP", 120))) pieces.push({ title: d.title, url: d.url, content });
   }
   if (!pieces.length) throw new PermanentIngestError("No readable text found in this source");
   if (pieces.length > 5000) throw new PermanentIngestError("Source is too large (more than 5,000 chunks)");
@@ -179,7 +180,9 @@ export async function writeChunks(sourceId: string, agentId: string, docs: Doc[]
   const t0 = Date.now();
   let vectors: number[][];
   try {
-    vectors = await embedAll(pieces.map((p) => p.content));
+    // Each passage is embedded with its page/source title, so a passage that never repeats its topic ("₹265") still
+    // carries it ("Price list"). The stored content stays as it was.
+    vectors = await embedAll(pieces.map((p) => (p.title ? `${p.title}\n${p.content}` : p.content)));
   } catch (e) {
     await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "error", error: (e as Error).message });
     throw e;
