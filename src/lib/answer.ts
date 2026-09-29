@@ -1,8 +1,17 @@
 import { q, q1 } from "./db";
 import { HttpError } from "./http";
-import { getLLM } from "./providers";
+import { getFallbackLLM, getLLM, getSmallLLM } from "./providers";
+import { isSmallTalk, route, type Route } from "./routing";
+import { newRun, resilientStream, type Run } from "./providers/resilient";
+import { trimHistory } from "./providers/turns";
+import { recordAnswer } from "./ai-log";
+import { queryRewriteEnabled, rewriteFollowUp } from "./query-rewrite";
+import { questionKey } from "./cache-key";
+import { env } from "./env";
+import type { Usage } from "./providers/types";
+import { envNum } from "./env";
 import type { ChatMessage } from "./providers/types";
-import { buildSystemPrompt, retrieveKnowledge, toCitations, type Citation } from "./rag";
+import { PROMPT_VERSION, buildSystemPrompt, retrieveKnowledge, toCitations, type Citation } from "./rag";
 import { refundCredit, reserveCredit } from "./usage";
 import { wantsHuman } from "./handoff-intent";
 import { findConversation, recordVisitorMessage, startHandoff } from "./handoff";
@@ -21,6 +30,7 @@ export type AnswerAgent = {
   handoff_enabled: boolean;
   handoff_message: string;
   lead_mode: "off" | "after_first_answer" | "before_chat";
+  knowledge_version: string;
 };
 export type Channel = "widget" | "playground" | "whatsapp";
 
@@ -28,7 +38,7 @@ const HISTORY_TURNS = 10;
 
 export async function loadAgent(agentId: string): Promise<AnswerAgent | null> {
   return q1<AnswerAgent>(
-    `SELECT a.id, a.user_id, a.name, a.instructions, a.handoff_enabled, a.handoff_message, a.lead_mode, u.plan
+    `SELECT a.id, a.user_id, a.name, a.instructions, a.handoff_enabled, a.handoff_message, a.lead_mode, a.knowledge_version, u.plan
        FROM agents a JOIN users u ON u.id = a.user_id WHERE a.id = $1`,
     [agentId]
   );
@@ -36,11 +46,30 @@ export async function loadAgent(agentId: string): Promise<AnswerAgent | null> {
 
 export type Prepared = {
   conversationId: string;
+  agentId: string;
+  userId: string;
+  channel: Channel;
+  question: string;
+  promptVersion: string;
+  /** What retrieval found, kept for the answer trace. */
+  retrieved: { chunkId: number; score: number; title: string; url: string | null; via?: string }[];
+  fixes: { id: string; score: number; question: string }[];
+  /** What retrieval searched for, and the follow-up rewrite that produced it (if QUERY_REWRITE=on). */
+  searchQuery: string;
+  rewrite: { model: string; usage: Usage | null } | null;
   system: string;
   history: ChatMessage[];
   citations: Citation[];
   /** An owner Q&A fix matched: then only passages the answer explicitly cites are shown (a fix has no source). */
   fixMatched: boolean;
+  /** Nothing in the sources or Q&A answers matched (shown as a knowledge gap in Analytics). */
+  knowledgeGap: boolean;
+  /** Answer-cache key when this answer may be cached or served from the cache (first questions only). */
+  cache: { key: string; knowledgeVersion: string; model: string } | null;
+  /** Set when the answer comes from the cache: no search and no model call were needed. */
+  cached: { answer: string } | null;
+  /** "small" = small talk or a close Q&A match, answered by LLM_SMALL_MODEL when one is configured. */
+  route: Route;
   started: number;
 };
 
@@ -87,19 +116,81 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
        ) t ORDER BY id`,
       [conversationId, HISTORY_TURNS * 2]
     );
-    const history: ChatMessage[] = [...prior, { role: "user", content: message }];
+    const history: ChatMessage[] = [...trimHistory(prior, envNum("HISTORY_MAX_CHARS", 6000)), { role: "user", content: message }];
+
+    // Answer cache: a visitor's first question, asked word for word before, gets the stored answer if nothing that
+    // shapes answers (sources, Q&A, instructions, prompt, model) has changed since. The owner's playground always
+    // gets a fresh answer.
+    // The model part of the key covers the main and the small model, so changing either invalidates cached answers.
+    const main = getLLM();
+    const small = getSmallLLM();
+    const models = `${main.name}:${main.model}${small ? `|${small.name}:${small.model}` : ""}`;
+    const key = channel !== "playground" && answerCacheEnabled() && !prior.some((m) => m.role === "user") ? questionKey(message) : null;
+    const cache = key ? { key, knowledgeVersion: agent.knowledge_version, model: models } : null;
+    if (cache) {
+      const hit = await q1<{ answer: string; citations: Citation[]; knowledge_gap: boolean }>(
+        `UPDATE answer_cache SET hits = hits + 1
+          WHERE agent_id = $1 AND question_key = $2 AND knowledge_version = $3 AND prompt_version = $4 AND model = $5
+            AND created_at > now() - ($6 || ' hours')::interval
+          RETURNING answer, citations, knowledge_gap`,
+        [agent.id, cache.key, cache.knowledgeVersion, PROMPT_VERSION, cache.model, String(envNum("ANSWER_CACHE_TTL_HOURS", 24))]
+      );
+      if (hit) {
+        await q("INSERT INTO messages (conversation_id, role, content) VALUES ($1,'user',$2)", [conversationId, message]);
+        return {
+          conversationId,
+          agentId: agent.id,
+          userId: agent.user_id,
+          channel,
+          question: message,
+          searchQuery: message,
+          rewrite: null,
+          promptVersion: PROMPT_VERSION,
+          retrieved: [],
+          fixes: [],
+          system: "",
+          history,
+          citations: hit.citations,
+          fixMatched: false,
+          knowledgeGap: hit.knowledge_gap,
+          cache,
+          cached: { answer: hit.answer },
+          route: "main",
+          started,
+        };
+      }
+    }
 
     // Retrieval query = the latest question plus the previous user question, so follow-ups like "and the price?" still work.
     const lastUser = [...prior].reverse().find((m) => m.role === "user")?.content;
-    const { chunks, fixes } = await retrieveKnowledge(agent.id, lastUser ? `${lastUser}\n${message}` : message, message);
+    // Follow-ups ("and the 10 kg one?") need the earlier question to be searchable: rewritten by a small model when
+    // QUERY_REWRITE=on, otherwise the previous question is simply searched together with the new message.
+    const rewrite = lastUser && queryRewriteEnabled() ? await rewriteFollowUp(prior, message) : null;
+    const searchQuery = rewrite?.query ?? (lastUser ? `${lastUser}\n${message}` : message);
+    // Small talk ("thanks!", "hi") needs no search, and isn't a gap in the agent's knowledge.
+    const smallTalk = isSmallTalk(message);
+    const { chunks, fixes } = smallTalk ? { chunks: [], fixes: [] } : await retrieveKnowledge(agent.id, searchQuery, message);
 
     await q("INSERT INTO messages (conversation_id, role, content) VALUES ($1,'user',$2)", [conversationId, message]);
     return {
       conversationId,
+      agentId: agent.id,
+      userId: agent.user_id,
+      channel,
+      question: message,
+      searchQuery,
+      rewrite: rewrite && { model: rewrite.model, usage: rewrite.usage },
+      promptVersion: PROMPT_VERSION,
+      retrieved: chunks.map((c) => ({ chunkId: Number(c.id), score: Math.round(c.score * 1000) / 1000, title: c.page_title || c.source_title, url: c.page_url, via: c.via })),
+      fixes: fixes.map((f) => ({ id: f.id, score: Math.round(f.score * 1000) / 1000, question: f.question })),
       system: buildSystemPrompt(agent, chunks, { canHandoff: agent.handoff_enabled && channel !== "playground", fixes }),
       history,
       citations: toCitations(chunks),
       fixMatched: fixes.length > 0,
+      knowledgeGap: !smallTalk && !chunks.length && !fixes.length,
+      cache,
+      cached: null,
+      route: route(message, fixes.length ? Math.max(...fixes.map((f) => f.score)) : null, envNum("ROUTE_FIX_SCORE", 0.8)),
       started,
     };
   } catch (e) {
@@ -109,10 +200,39 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
 }
 
 /** Stores the bot's reply; returns its message id (the widget uses it for 👍/👎 feedback). */
+export const answerCacheEnabled = () => env("ANSWER_CACHE")?.toLowerCase() !== "off";
+
+/** Streams the bot's reply through the production wrapper (timeouts, retries, backup model), or from the cache. */
+export function streamAnswer(p: Prepared, run: Run, signal?: AbortSignal): AsyncGenerator<string> {
+  if (p.cached) return streamCached(p, run);
+  const primary = (p.route === "small" && getSmallLLM()) || getLLM();
+  return resilientStream({ system: p.system, messages: p.history, signal }, primary, getFallbackLLM(), run);
+}
+
+async function* streamCached(p: Prepared, run: Run): AsyncGenerator<string> {
+  Object.assign(run, { provider: "cache", model: p.cache!.model, attempts: 1, usage: { inputTokens: 0, outputTokens: 0 } });
+  run.firstTokenMs = Date.now() - p.started;
+  // Sent in word groups so the widget renders it the same way as a live answer.
+  for (const part of p.cached!.answer.match(/\S+\s*/g) ?? [p.cached!.answer]) yield part;
+}
+
+/** Stores a fresh first answer for reuse (only answers from the main model, not the backup). Never throws. */
+export async function cacheAnswer(p: Prepared, run: Run, answer: string): Promise<void> {
+  if (!p.cache || p.cached || run.fallbackUsed || !answer.trim()) return;
+  await q(
+    `INSERT INTO answer_cache (agent_id, question_key, knowledge_version, prompt_version, model, answer, citations, knowledge_gap)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (agent_id, question_key) DO UPDATE SET knowledge_version = EXCLUDED.knowledge_version, prompt_version = EXCLUDED.prompt_version,
+       model = EXCLUDED.model, answer = EXCLUDED.answer, citations = EXCLUDED.citations, knowledge_gap = EXCLUDED.knowledge_gap,
+       hits = 0, created_at = now()`,
+    [p.agentId, p.cache.key, p.cache.knowledgeVersion, p.promptVersion, p.cache.model, answer, JSON.stringify(p.citations), p.knowledgeGap]
+  ).catch((e) => console.error("Caching the answer failed:", (e as Error).message));
+}
+
 export async function saveAnswer(p: Prepared, answer: string): Promise<number> {
   const row = await q1<{ id: string }>(
     "INSERT INTO messages (conversation_id, role, content, citations, latency_ms, knowledge_gap) VALUES ($1,'assistant',$2,$3,$4,$5) RETURNING id",
-    [p.conversationId, answer, JSON.stringify(p.citations), Date.now() - p.started, !p.citations.length && !p.fixMatched]
+    [p.conversationId, answer, JSON.stringify(p.citations), Date.now() - p.started, p.knowledgeGap]
   );
   return Number(row!.id);
 }
@@ -136,13 +256,18 @@ export async function answerOnce(
   const p = await prepareAnswer(agent, sessionId, channel, message);
   if ("handedOff" in p) return p;
   let text = "";
+  const run = newRun();
   try {
-    for await (const delta of getLLM().stream({ system: p.system, messages: p.history })) text += delta;
+    for await (const delta of streamAnswer(p, run)) text += delta;
     if (!text.trim()) throw new Error("The model returned an empty reply");
   } catch (e) {
+    // WhatsApp sends the reply in one piece, so a half-written answer is never sent: it's an error, credit refunded.
     await refundCredit(agent.user_id).catch(() => {});
+    await recordAnswer(p, run, { status: "error", error: e, answer: text });
     throw e;
   }
-  await saveAnswer(p, text).catch((e) => console.error("Saving reply failed:", e));
+  const messageId = await saveAnswer(p, text).catch((e) => (console.error("Saving reply failed:", e), null));
+  await recordAnswer(p, run, { status: "ok", messageId });
+  await cacheAnswer(p, run, text);
   return { text, citations: usedCitations(text, p) };
 }

@@ -20,6 +20,8 @@
   --new-soft: #fdeee4;
   --branch: #1d4ed8;
   --branch-soft: #e7eefc;
+  --pr3: #6d28d9;
+  --pr3-soft: #f0e9fd;
   --code-bg: #eef2f2;
   --shadow: 0 1px 2px rgba(20, 25, 27, .06), 0 8px 24px rgba(20, 25, 27, .06);
   --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
@@ -40,6 +42,8 @@
     --new-soft: #3a2216;
     --branch: #9db8f5;
     --branch-soft: #1a2542;
+    --pr3: #c4b0f7;
+    --pr3-soft: #2a1f47;
     --code-bg: #1e2629;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
   }
@@ -57,6 +61,8 @@
   --new-soft: #3a2216;
   --branch: #9db8f5;
   --branch-soft: #1a2542;
+  --pr3: #c4b0f7;
+  --pr3-soft: #2a1f47;
   --code-bg: #1e2629;
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
 }
@@ -75,14 +81,14 @@ p { margin: 0; }
 @media (max-width: 900px) { .shell { grid-template-columns: minmax(0, 1fr); gap: 24px; padding-block: 24px 60px; } }
 
 /* table of contents */
-.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: 14px; display: flex; flex-direction: column; gap: 14px; }
+.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: 14px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 48px); overflow-y: auto; }
 .toc .brand { font-family: var(--display); font-weight: 700; font-size: 17px; }
 .toc ol { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
 .toc a { display: block; color: var(--muted); text-decoration: none; padding: 4px 10px; border-left: 2px solid var(--line); }
 .toc a:hover { color: var(--ink); border-left-color: var(--accent); }
 .toc .sub a { padding-left: 22px; font-size: 13px; }
 @media (max-width: 900px) {
-  .toc { position: static; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .toc { position: static; max-height: none; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   .toc ol { flex-direction: row; flex-wrap: wrap; gap: 4px 8px; }
   .toc .sub { display: none; }
   .toc a { border-left: 0; padding: 2px 0; }
@@ -106,6 +112,8 @@ section { display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 2
 .tag { display: inline-block; font: 600 11px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 5px; vertical-align: 2px; white-space: nowrap; }
 .tag.new { background: var(--new-soft); color: var(--new); }
 .tag.branch { background: var(--branch-soft); color: var(--branch); }
+.tag.pr3 { background: var(--pr3-soft); color: var(--pr3); }
+.results td.up { color: var(--accent); font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; color: var(--muted); }
 
 /* feature map */
@@ -183,6 +191,13 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
       <li class="sub"><a href="#analytics">Analytics</a></li>
       <li><a href="#account">Account and billing</a></li>
       <li><a href="#ai">AI and languages</a></li>
+      <li><a href="#prod">AI in production</a></li>
+      <li class="sub"><a href="#reliability">Reliability</a></li>
+      <li class="sub"><a href="#search">Search quality</a></li>
+      <li class="sub"><a href="#cost">Cost controls</a></li>
+      <li class="sub"><a href="#hard-sources">Hard-to-read sources</a></li>
+      <li class="sub"><a href="#eval">Quality evaluation</a></li>
+      <li><a href="#admin">Admin view</a></li>
       <li><a href="#safety">Safety and limits</a></li>
       <li><a href="#deploy">Go-live checklist</a></li>
       <li><a href="#testing">Testing</a></li>
@@ -200,7 +215,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <span><strong>2</strong> channels: website chat, WhatsApp</span>
         <span><strong>4</strong> AI providers: OpenAI-compatible, Anthropic, Sarvam, offline mock</span>
         <span><strong>4</strong> plans billed in INR through Razorpay</span>
-        <span><strong>125</strong> automated checks (21 unit, 104 end-to-end)</span>
+        <span><strong>159</strong> automated checks (38 unit, 121 end-to-end) plus a 32-question quality evaluation</span>
       </div>
     </header>
 
@@ -214,6 +229,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
       <div class="legend">
         <span><span class="tag new">New</span> added in pull request #1</span>
         <span><span class="tag branch">New · PR #2</span> added in pull request #2 (both are merged into <code>main</code>)</span>
+        <span><span class="tag pr3">New · PR #3</span> production AI work and the admin view (pull request #3)</span>
       </div>
       <div class="table-wrap">
         <table>
@@ -231,6 +247,13 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
             <tr><td class="area"></td><td>Formatted answers (bold, lists, links) <span class="tag new">New</span></td><td>Website chat, Chats</td></tr>
             <tr><td class="area">Growth</td><td>Lead capture and CSV export <span class="tag branch">New · PR #2</span></td><td>Settings, Leads tab</td></tr>
             <tr><td class="area"></td><td>Analytics and knowledge gaps <span class="tag branch">New · PR #2</span></td><td>Analytics tab</td></tr>
+            <tr><td class="area">AI platform</td><td>Time limits, retries and a backup model for every answer <span class="tag pr3">New · PR #3</span></td><td>Automatic; settings in <code>.env</code></td></tr>
+            <tr><td class="area"></td><td>Hybrid search (meaning + keywords, product codes, Hinglish) <span class="tag pr3">New · PR #3</span></td><td>Automatic</td></tr>
+            <tr><td class="area"></td><td>Answer cache, small-model routing, cost tracking <span class="tag pr3">New · PR #3</span></td><td>Automatic; admin view</td></tr>
+            <tr><td class="area"></td><td>Scanned PDFs, photos (OCR) and JavaScript websites <span class="tag pr3">New · PR #3</span></td><td>Sources tab, when set up</td></tr>
+            <tr><td class="area"></td><td>Durable ingestion queue with retries <span class="tag pr3">New · PR #3</span></td><td>Sources tab (Retry on any failed source)</td></tr>
+            <tr><td class="area"></td><td>Quality evaluation (<code>pnpm eval</code>) <span class="tag pr3">New · PR #3</span></td><td>Command line</td></tr>
+            <tr><td class="area">Operator</td><td>Admin view: accounts, AI cost, failures, answer traces <span class="tag pr3">New · PR #3</span></td><td><code>/admin</code></td></tr>
             <tr><td class="area">Account</td><td>Sign up, log in, password reset by e-mail <span class="tag new">New</span></td><td>Login page</td></tr>
             <tr><td class="area"></td><td>Plans, message credits, Razorpay subscriptions</td><td>Plans &amp; billing</td></tr>
           </tbody>
@@ -280,8 +303,9 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
             <p class="label">Good to know</p>
             <ul class="notes">
               <li>Up to 50 sources per agent. Removing a source makes the assistant forget it at once.</li>
-              <li>If a source is still <i>processing</i> after 20 minutes (for example because the server restarted), it is marked failed.</li>
-              <li>Failed website sources have a <b>Retry</b> button that reads the site again with the same page count. Files and pasted text have to be added again.</li>
+              <li>Sources are processed by a durable queue <span class="tag pr3">New · PR #3</span>: temporary errors (rate limits, timeouts) are retried automatically with backoff, and a server restart never loses work.</li>
+              <li>Failed sources have a <b>Retry</b> button. Websites are read again; files and pasted text are processed again from the content kept when they were added.</li>
+              <li>With OCR set up, scanned PDFs and photos (JPG, PNG) of price lists and menus can be added too. See <a href="#hard-sources">hard-to-read sources</a>.</li>
               <li>Menus, footers and scripts are stripped from web pages. Hindi text is split at the danda (।), so sentences stay whole.</li>
               <li>Private or internal addresses (for example <code>localhost</code> or cloud metadata IPs) are refused.</li>
             </ul>
@@ -587,7 +611,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <ul class="notes">
           <li><b>Answers stay grounded</b>: the assistant uses only your sources and Q&amp;A answers. When it doesn't know, it says so and suggests contacting the business, or talking to a person.</li>
           <li><b>Customers' own language</b>: it replies in the language and script the customer writes in, including Hinglish in English letters.</li>
-          <li><b>Follow-up questions</b> such as "and the price?" work, because the previous question is used in the search too.</li>
+          <li><b>Follow-up questions</b> such as "and the price?" work, because the previous question is used in the search too (optionally rewritten by a small model).</li>
+          <li><b>Small talk</b> ("thanks!", "dhanyavaad") is answered without searching, and doesn't count as a knowledge gap.</li>
           <li><b>Formatted answers</b> <span class="tag new">New</span>: bold, lists, code and links in the website chat and in the inbox.</li>
         </ul>
         <div class="table-wrap">
@@ -604,9 +629,97 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
     </section>
 
     <!-- ================================================================ -->
+    <section id="prod">
+      <div class="group-head">
+        <span class="eyebrow">Part 7 · for whoever runs the platform</span>
+        <h2>AI in production <span class="tag pr3">New · PR #3</span></h2>
+      </div>
+      <p class="prose muted">What happens behind every answer, so the assistant keeps working when a provider has a bad day, stays affordable at scale, and can be measured.</p>
+
+      <article class="feature" id="reliability">
+        <h3>Reliability</h3>
+        <ul class="notes">
+          <li><b>Time limits</b> on every answer: 20 s to the first word, 90 s in total. A stuck provider can no longer leave a WhatsApp customer waiting forever.</li>
+          <li><b>Retries with backoff</b> (2 by default) for rate limits, overloads, server errors and dropped connections, but only while nothing has been shown to the customer, so answers are never repeated or mixed.</li>
+          <li><b>Backup model</b> (<code>LLM_FALLBACK_PROVIDER</code> / <code>LLM_FALLBACK_MODEL</code>): when the main model keeps failing, or its key stops working, another provider answers.</li>
+          <li><b>History by size</b>: only the newest 6,000 characters of the conversation are sent, so long chats can't blow the model's limit or the bill.</li>
+          <li><b>Ingestion queue</b> in Postgres: jobs survive restarts, run safely on several servers, and retry temporary failures (3 attempts). Permanent problems, like a 404 page or an empty file, fail at once with a clear message.</li>
+        </ul>
+      </article>
+
+      <article class="feature" id="search">
+        <h3>Search quality</h3>
+        <div class="cols">
+          <ul class="notes">
+            <li><b>Hybrid search</b>: meaning-based search plus keyword search, merged by rank. Product codes (AM-B500), names, prices and Hindi words match exactly, and common Hinglish words also search their English equivalents ("atta ka rate" finds "price").</li>
+            <li>A passage found only by keywords must share half of the question's meaningful words, so loose matches don't pull irrelevant text into unrelated questions.</li>
+            <li>Passages are embedded with their page title, and near-duplicates (repeated website footers) are dropped.</li>
+            <li>Optional, off until measured: a <b>reranker</b> (Cohere or Jina API) and <b>follow-up rewriting</b> by a small model.</li>
+            <li>Changing the embedding model is safe: every passage records its model, and the admin view re-indexes everything with one button.</li>
+          </ul>
+          <div class="table-wrap">
+            <table class="results">
+              <thead><tr><th>Kirana test set</th><th class="num">Before</th><th class="num">After</th></tr></thead>
+              <tbody>
+                <tr><td>Right passage found (hit@k)</td><td class="num">50%</td><td class="num up">89%</td></tr>
+                <tr><td>Right passage ranked first</td><td class="num">43%</td><td class="num up">75%</td></tr>
+                <tr><td>Hinglish questions found</td><td class="num">0%</td><td class="num up">100%</td></tr>
+                <tr><td>Correct "I don't know" for off-topic</td><td class="num">100%</td><td class="num">100%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="muted small">Measured with <code>pnpm eval</code> using the offline mock models, whose embeddings only match shared words. Real embedding models score higher on paraphrases; run the evaluation with your production models for real numbers.</p>
+      </article>
+
+      <article class="feature" id="cost">
+        <h3>Cost controls</h3>
+        <ul class="notes">
+          <li><b>Answer cache</b>: a visitor's first question asked word for word before gets the stored answer, with no search and no AI call. It's invalidated automatically the moment sources, Q&amp;A answers, instructions, the prompt or the model change. Customers use a credit as usual; your AI cost for that answer is zero.</li>
+          <li><b>Small-model routing</b> (<code>LLM_SMALL_PROVIDER</code> / <code>LLM_SMALL_MODEL</code>): small talk, and questions your own Q&amp;A answer already covers closely, go to a cheaper model.</li>
+          <li><b>Cost tracking</b>: every answer records its tokens and cost (from <code>LLM_PRICES</code>), shown per account and per model in the admin view, in USD and rupees.</li>
+        </ul>
+      </article>
+
+      <article class="feature" id="hard-sources">
+        <h3>Hard-to-read sources</h3>
+        <ul class="notes">
+          <li><b>Scanned PDFs and photos</b> (<code>OCR_PROVIDER</code> + <code>OCR_MODEL</code>, OpenAI-compatible or Anthropic): PDFs with almost no text layer are read by a vision model, and owners can upload JPG, PNG or WebP photos of price lists and menus.</li>
+          <li><b>JavaScript-built websites</b> (<code>PRERENDER_URL</code>): pages that are an empty app shell are fetched through a rendering service. Without one, the owner gets a clear message suggesting a PDF or pasted text.</li>
+        </ul>
+      </article>
+
+      <article class="feature" id="eval">
+        <h3>Quality evaluation</h3>
+        <p class="prose"><code>pnpm eval</code> asks a set of real customer questions through the actual answer pipeline and scores it: whether the right passage was found, whether the answer has the right fact, whether off-topic questions get "I don't know", whether the reply uses the customer's script, and optionally whether a grader model finds anything unsupported. It also reports speed and cost per answer. <code>--check</code> fails when a score drops more than 5 points below the saved baseline, so it can guard every change in CI. The first dataset is a Bengaluru grocery shop with 32 questions in English, Hindi and Hinglish.</p>
+      </article>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="admin">
+      <div class="group-head">
+        <span class="eyebrow">Part 8 · for platform operators</span>
+        <h2>Admin view <span class="tag pr3">New · PR #3</span></h2>
+      </div>
+      <p class="prose">At <code>/admin</code>, for the e-mails listed in <code>ADMIN_EMAILS</code>. Everyone else gets a plain "not found". Pick today, 7, 30 or 90 days.</p>
+      <div class="cols">
+        <ul class="notes">
+          <li><b>Overview</b>: active, new and paying accounts; answers; failure rate; time to first word (average and p95); AI cost in total and per answer; helpful rate; charts of answers and cost per day.</li>
+          <li><b>Accounts</b>: every client's plan, credits used this month (red above 90%), agents, conversations, answers, failures, 👎 and AI cost. Open one to see its agents and latest AI calls.</li>
+          <li><b>Problems</b>: answers that failed, were cut off, needed retries or came from the backup model, with the error.</li>
+          <li><b>Models &amp; ingestion</b>: calls, failures, tokens, speed and cost per model; the ingestion queue and failed sources; embedding model status with <b>Re-index</b>.</li>
+          <li><b>Answer trace</b>: for any answer, the question, what was searched for, the exact passages given to the model with their scores and how they were found, the model, attempts, timings, tokens and cost.</li>
+        </ul>
+        <figure><img src="img/admin-trace.png" alt="Answer trace panel showing result, model, attempts, timings, tokens, cost, the question, the answer and the passage given to the model" width="1320" height="1000" loading="lazy"><figcaption>An answer trace: this one needed 3 attempts after rate limits.</figcaption></figure>
+      </div>
+      <figure><img src="img/admin-overview.png" alt="Admin overview with stat tiles for accounts, answers, failures, speed, cost and helpfulness, charts of answers and cost per day, and the top accounts table" width="1320" height="1466" loading="lazy"><figcaption>The admin overview with 30 days of example data.</figcaption></figure>
+      <p class="muted small">The admin view shows customers' questions and answers in traces. Keep <code>ADMIN_EMAILS</code> short and mention this in your privacy policy.</p>
+    </section>
+
+    <!-- ================================================================ -->
     <section id="safety">
       <div class="group-head">
-        <span class="eyebrow">Part 7</span>
+        <span class="eyebrow">Part 9</span>
         <h2>Safety and limits</h2>
       </div>
       <div class="table-wrap">
@@ -633,8 +746,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <h2>Go-live checklist</h2>
       </div>
       <ul class="checklist">
-        <li><span>Run a long-lived Node server (<code>pnpm build &amp;&amp; pnpm start</code>, Docker or a VM) with Node 22.9+, pnpm 10+ and Postgres 15+ with pgvector. Ingestion runs in the background, so serverless hosting needs a job queue first.</span></li>
-        <li><span>Run <code>pnpm migrate</code>. There are now 11 migrations; 006 to 011 were added in this round, and they're safe on existing data.</span></li>
+        <li><span>Run a long-lived Node server (<code>pnpm build &amp;&amp; pnpm start</code>, Docker or a VM) with Node 22.9+, pnpm 10+ and Postgres 15+ with pgvector. The ingestion workers run inside the app server; several servers can share the queue.</span></li>
+        <li><span>Run <code>pnpm migrate</code>. There are now 16 migrations, all safe on existing data (012 to 016 add AI call records, the ingestion queue, keyword search, search-query records and the answer cache).</span></li>
         <li><span>Set <code>AUTH_SECRET</code> and a separate <code>ENCRYPTION_KEY</code> (32+ random characters each), and back up the encryption key.</span></li>
         <li><span>Set <code>APP_URL</code> to the public <code>https://</code> address. That turns on secure cookies and is needed for WhatsApp and Razorpay webhooks.</span></li>
         <li><span>Choose real AI providers: <code>LLM_PROVIDER</code>, <code>LLM_MODEL</code>, keys and <code>EMBEDDING_PROVIDER=openai</code>. Then run <code>pnpm preflight --live</code>.</span></li>
@@ -642,6 +755,10 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <li><span>Set <code>SARVAM_API_KEY</code> for voice notes (optional).</span></li>
         <li><span>Billing: the Razorpay keys, webhook secret, and <code>pnpm razorpay:setup</code> for the plan IDs. WhatsApp: the Meta app values for Connect with Facebook.</span></li>
         <li><span>Tune <code>RETRIEVAL_MIN_SCORE</code> (start near 0.25 with real embeddings) and <code>ANSWER_FIX_MIN_SCORE</code> (0.5) on your own customers' questions.</span></li>
+        <li><span>Set <code>ADMIN_EMAILS</code> for the admin view, and <code>LLM_PRICES</code> (plus <code>EMBEDDING_PRICE_PER_MTOK</code>, optionally <code>USD_INR_RATE</code>) from your providers' current price lists.</span></li>
+        <li><span>Add a backup model (<code>LLM_FALLBACK_PROVIDER</code> / <code>LLM_FALLBACK_MODEL</code>) from a different provider, and optionally a small model for small talk.</span></li>
+        <li><span>Optional: <code>OCR_PROVIDER</code> + <code>OCR_MODEL</code> for scanned PDFs and photos, and <code>PRERENDER_URL</code> for JavaScript-built websites.</span></li>
+        <li><span>Run <code>pnpm eval -- --save-baseline</code> with your production models, then <code>pnpm eval -- --check</code> before every prompt, search or model change.</span></li>
       </ul>
       <p class="muted small">The full list of settings is in <code>docs/setup.md</code>. Deployment, backups and https are covered in <code>docs/deployment.md</code>.</p>
     </section>
@@ -652,12 +769,13 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <span class="eyebrow">Quality</span>
         <h2>Testing</h2>
       </div>
-      <p class="prose">Every suite below passed on 25 September 2026, run against a local Postgres with pgvector, the offline mock models, and fake Meta, Razorpay, SMTP and Sarvam servers. The screenshots in this guide come from the same setup, which is why answers start with "(mock model)".</p>
+      <p class="prose">Every suite below passed on 29 September 2026, run against a local Postgres with pgvector, the offline mock models (with injected failures), and fake Meta, Razorpay, SMTP, Sarvam, vision and rendering servers. The screenshots in this guide come from the same setup, which is why answers start with "(mock model)".</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Command</th><th>Covers</th><th class="num">Checks</th></tr></thead>
           <tbody>
-            <tr><td><code>pnpm test</code></td><td>Chunking, WhatsApp formatting, encryption, handoff phrases, Markdown, allowed websites, phone/e-mail/CSV</td><td class="num">21</td></tr>
+            <tr><td><code>pnpm test</code></td><td>Chunking, WhatsApp formatting, encryption, handoff phrases, Markdown, allowed websites, phone/e-mail/CSV, retries and timeouts, history trimming, pricing, keyword search and fusion, duplicates, reranking, cache keys, routing, scan detection, evaluation scoring</td><td class="num">38</td></tr>
+            <tr><td><code>pnpm smoke:ai</code></td><td>Retries, timeouts, backup model, ingestion queue and crash recovery, answer cache, routing, OCR, JavaScript sites, admin view, answer traces, re-indexing</td><td class="num">17</td></tr>
             <tr><td><code>pnpm smoke</code></td><td>Accounts, ingestion, answers, isolation, widget, rate limits</td><td class="num">17</td></tr>
             <tr><td><code>pnpm smoke:features</code></td><td>Feedback, Q&amp;A answers, analytics, leads, CSV</td><td class="num">12</td></tr>
             <tr><td><code>pnpm smoke:account</code></td><td>Password reset, allowed websites</td><td class="num">9</td></tr>
@@ -666,6 +784,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
             <tr><td><code>pnpm smoke:embedded</code></td><td>Connect with Facebook flow</td><td class="num">13</td></tr>
             <tr><td><code>pnpm smoke:billing</code></td><td>Razorpay checkout, webhooks, cancel</td><td class="num">15</td></tr>
             <tr><td><code>pnpm smoke:sarvam</code></td><td>Sarvam chat provider</td><td class="num">4</td></tr>
+            <tr><td><code>pnpm eval</code></td><td>Answer quality on a 32-question dataset (scores, not pass/fail; <code>--check</code> gates regressions)</td><td class="num">–</td></tr>
           </tbody>
         </table>
       </div>
@@ -681,11 +800,12 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <div>
           <p class="label">Known limits</p>
           <ul class="notes">
-                        <li>Rate limits and background ingestion live in one server's memory. More than one server needs Redis and a job queue.</li>
+            <li>Rate limits live in one server's memory; more than one server needs Redis for them. (Ingestion is now a shared Postgres queue.)</li>
             <li>The visitor IP is taken from <code>X-Forwarded-For</code>, which is only safe behind your own proxy.</li>
             <li>Connect with Facebook and voice notes were tested against fake Meta and Sarvam servers, not live accounts. Test with your own number first.</li>
             <li>Sarvam's instant speech-to-text takes clips under about 30 seconds. Longer voice notes get a "please type" reply.</li>
             <li>The assistant doesn't read WhatsApp images. The inbox lists 100 conversations, with no search.</li>
+            <li>The reranker, follow-up rewriting, OCR and page rendering were tested against fake services only, and the quality numbers come from mock models. Run <code>pnpm eval</code> with real models before switching the optional steps on.</li>
           </ul>
         </div>
         <div>
@@ -693,7 +813,6 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
           <ul class="notes">
             <li><b>Team members</b> who can reply from the inbox without the owner's login.</li>
             <li><b>Automatic website re-sync</b> (weekly), so answers follow price changes.</li>
-            <li><b>Hybrid search</b> (meaning plus keywords) for product names and SKUs.</li>
             <li><b>Actions</b>: order status from Shopify or WooCommerce, appointment booking, UPI payment links.</li>
             <li><b>WhatsApp templates</b>, for replies after 24 hours and opt-in offers.</li>
             <li><b>Credit top-ups</b>, GST invoices, and data export and deletion for India's DPDP Act.</li>
@@ -703,7 +822,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
     </section>
 
     <footer>
-      Chatbase India · repository <code>venu005/chatbase-mvp</code> · guide written 25 September 2026 from the code on <code>main</code>. The source of this page is <code>docs/guide/index.html</code>.
+      Chatbase India · repository <code>venu005/chatbase-mvp</code> · guide updated 29 September 2026 from the code on <code>main</code> plus pull request #3. The source of this page is <code>docs/guide/index.html</code>.
     </footer>
   </main>
 </div>

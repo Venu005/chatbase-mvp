@@ -60,6 +60,7 @@ The full variable reference is in [docs/setup.md](docs/setup.md#4-configuration-
 | Guide | Read it when you want to |
 | --- | --- |
 | [docs/guide/index.html](docs/guide/index.html) | read the product guide: every feature, how owners use it, go-live checklist (open in a browser) |
+| [docs/admin.md](docs/admin.md) | watch every account, AI cost, failures and answer traces in the admin view |
 | [docs/setup.md](docs/setup.md) | install, fill in `.env`, look up any variable or command |
 | [docs/providers.md](docs/providers.md) | pick models: OpenAI, Claude, Sarvam, self-hosted; embeddings; Indian-language tips |
 | [docs/whatsapp.md](docs/whatsapp.md) | connect a number manually (paste Phone number ID, token, app secret) |
@@ -135,8 +136,8 @@ Razorpay are listed in [docs/embedded-signup.md](docs/embedded-signup.md) and [d
 
 The full list is in [docs/deployment.md](docs/deployment.md). The important points:
 
-- Ingestion and WhatsApp replies run in the web process after the response is sent. That is fine on a normal server; on
-  serverless move them to a queue/worker (pg-boss, BullMQ, Inngest).
+- Ingestion is a durable Postgres job queue (retries, crash recovery, safe with several servers); workers run inside the
+  long-lived app server. WhatsApp replies still run in the web process after the webhook is answered.
 - Rate limiting and handoff polling counters are in memory (per process). Use Redis if you run more than one instance.
 - URL fetching blocks private/loopback addresses but cannot fully stop DNS rebinding; put an egress proxy in front for
   untrusted users. Never set `ALLOW_PRIVATE_URLS=true` on a public deployment.

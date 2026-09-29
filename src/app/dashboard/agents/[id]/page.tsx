@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import AgentWorkspace from "@/components/AgentWorkspace";
 import Nav from "@/components/Nav";
-import { getUser } from "@/lib/auth";
+import { getUser, isAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   return (
     <>
-      <Nav email={user.email} />
+      <Nav email={user.email} admin={isAdmin(user)} />
       <AgentWorkspace id={id} />
     </>
   );

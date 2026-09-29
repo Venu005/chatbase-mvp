@@ -58,9 +58,12 @@ through your own proxy**, never directly to the internet.
 ## Things that assume a single process
 
 - **Rate limits are kept in memory** per process. Run one instance, or move them to Redis before scaling out.
-- **Website ingestion and WhatsApp replies run in the background of the web process** after the HTTP response is sent. That is
-  fine on a normal server. On serverless platforms (where the process may be frozen after responding) move both to a job queue
-  first.
+- **Ingestion is a durable job queue in Postgres**: every server runs workers (`INGEST_CONCURRENCY`, default 2) that claim
+  jobs with a lease, so several instances can run side by side and a crashed server's job is picked up again. Transient
+  failures are retried with backoff (`INGEST_MAX_ATTEMPTS`, default 3). Set `INGEST_WORKER=off` on servers that shouldn't
+  run jobs. Workers need a long-lived process (not serverless).
+- **WhatsApp replies run in the background of the web process** after the webhook is answered. That is fine on a normal
+  server; on serverless platforms move them to a queue first.
 - The website widget's human-handoff polling is plain HTTP polling every 4 seconds while a person is handling a chat, so it
   needs no special proxy settings (no websockets).
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import FixForm from "./FixForm";
+import { ColumnChart, Tile } from "./charts";
 
 type Data = {
   days: number;
@@ -25,86 +26,7 @@ type Data = {
 
 const fmt = (n: number) => n.toLocaleString("en-IN");
 const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : "–");
-const dayLabel = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 const CHANNEL: Record<string, string> = { widget: "Website", whatsapp: "WhatsApp" };
-
-/** Clean axis maximum (1, 2, 5 × 10ⁿ) at or above the largest value. */
-function niceMax(v: number): number {
-  if (v <= 4) return 4;
-  const p = 10 ** Math.floor(Math.log10(v));
-  return ([1, 2, 5, 10].find((m) => m * p >= v) ?? 10) * p;
-}
-
-function Tile({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <div className="tile">
-      <span className="muted small">{label}</span>
-      <strong>{value}</strong>
-      {note && <span className="muted small">{note}</span>}
-    </div>
-  );
-}
-
-/** Single-series column chart: conversations per day. Hover (or focus) a day for its exact count. */
-function DailyChart({ series }: { series: Data["series"] }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const max = niceMax(Math.max(0, ...series.map((d) => d.conversations)));
-  const h = hover === null ? null : series[hover];
-  return (
-    <figure className="chart" aria-label="Conversations per day">
-      <div className="chart-plot" onMouseLeave={() => setHover(null)}>
-        {[1, 0.5, 0].map((f) => (
-          <div key={f} className="chart-grid" style={{ bottom: `${f * 100}%` }}>
-            <span>{fmt(max * f)}</span>
-          </div>
-        ))}
-        <div className="chart-cols">
-          {series.map((d, i) => (
-            <button
-              key={d.day}
-              type="button"
-              className={`chart-col${hover === i ? " on" : ""}`}
-              onMouseEnter={() => setHover(i)}
-              onFocus={() => setHover(i)}
-              onBlur={() => setHover(null)}
-              aria-label={`${dayLabel(d.day)}: ${d.conversations} conversations`}
-            >
-              <span style={{ height: `${(d.conversations / max) * 100}%` }} />
-            </button>
-          ))}
-        </div>
-        {h && (
-          <div className="chart-tip" style={{ left: `${((hover! + 0.5) / series.length) * 100}%` }} role="status">
-            <span className="muted">{dayLabel(h.day)}</span> <strong>{fmt(h.conversations)}</strong> conversation{h.conversations === 1 ? "" : "s"}
-          </div>
-        )}
-      </div>
-      <div className="chart-x muted small">
-        <span>{dayLabel(series[0].day)}</span>
-        <span>{dayLabel(series[series.length - 1].day)}</span>
-      </div>
-      <details className="small">
-        <summary className="muted">Show as table</summary>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Day</th>
-              <th>Conversations</th>
-            </tr>
-          </thead>
-          <tbody>
-            {series.map((d) => (
-              <tr key={d.day}>
-                <td>{dayLabel(d.day)}</td>
-                <td>{fmt(d.conversations)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </details>
-    </figure>
-  );
-}
 
 export default function Analytics({ agentId }: { agentId: string }) {
   const [days, setDays] = useState<7 | 30 | 90>(30);
@@ -153,7 +75,7 @@ export default function Analytics({ agentId }: { agentId: string }) {
 
       <div className="card stack">
         <h3>Conversations per day</h3>
-        <DailyChart series={data.series} />
+        <ColumnChart title="Conversations" points={data.series.map((d) => ({ day: d.day, value: d.conversations }))} noun={(n) => (n === 1 ? "conversation" : "conversations")} />
       </div>
 
       <div className="card stack">

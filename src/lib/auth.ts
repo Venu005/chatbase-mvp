@@ -63,3 +63,17 @@ export async function requireUser(): Promise<User> {
   if (!user) throw new HttpError(401, "Please sign in");
   return user;
 }
+
+/** Platform operators: e-mails listed in ADMIN_EMAILS (comma-separated). They can open /admin. */
+export function isAdmin(user: Pick<User, "email"> | null): boolean {
+  if (!user) return false;
+  const list = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return list.includes(user.email.toLowerCase());
+}
+
+/** For admin API routes: 404 for everyone else, so the admin area isn't advertised. */
+export async function requireAdmin(): Promise<User> {
+  const user = await getUser();
+  if (!isAdmin(user)) throw new HttpError(404, "Not found");
+  return user!;
+}

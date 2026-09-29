@@ -1,6 +1,8 @@
 import { q, toVector } from "./db";
-import { getEmbedder } from "./providers";
-import { envNum } from "./env";
+import { embeddingModelId, getEmbedder } from "./providers";
+import { env, envNum } from "./env";
+import { dropNearDuplicates, fuse, keywordCoverage, keywordQuery } from "./keywords";
+import { rerank, rerankConfigured } from "./rerank";
 
 export type Retrieved = {
   id: number;
@@ -8,10 +10,16 @@ export type Retrieved = {
   page_title: string;
   page_url: string | null;
   source_title: string;
+  /** Cosine similarity to the question (0 to 1). */
   score: number;
+  /** Which search found it: meaning (vector), words (keyword), or both. */
+  via?: "vector" | "keyword" | "both";
 };
 
 export type Citation = { n: number; title: string; url: string | null };
+
+/** Bump when the system prompt changes meaningfully: stored with every answer so quality changes can be traced. */
+export const PROMPT_VERSION = "2026-09-29.1";
 
 /** An owner-written Q&A pair ("Fix this answer") that matched the visitor's question. */
 export type FixMatch = { id: string; question: string; answer: string; score: number };
@@ -23,7 +31,7 @@ export type FixMatch = { id: string; question: string; answer: string; score: nu
 export async function retrieveKnowledge(agentId: string, query: string, message: string): Promise<{ chunks: Retrieved[]; fixes: FixMatch[] }> {
   const texts = query === message ? [query] : [query, message];
   const [qVec, mVec = qVec] = await getEmbedder().embed(texts);
-  const [chunks, fixes] = await Promise.all([searchChunks(agentId, qVec), searchFixes(agentId, mVec)]);
+  const [chunks, fixes] = await Promise.all([searchChunks(agentId, qVec, query), searchFixes(agentId, mVec)]);
   return { chunks, fixes };
 }
 
@@ -31,26 +39,57 @@ async function searchFixes(agentId: string, vec: number[]): Promise<FixMatch[]> 
   const minScore = envNum("ANSWER_FIX_MIN_SCORE", 0.5);
   const rows = await q<FixMatch>(
     `SELECT id, question, answer, 1 - (embedding <=> $2::vector) AS score
-       FROM answer_fixes WHERE agent_id = $1
+       FROM answer_fixes WHERE agent_id = $1 AND (embedding_model IS NULL OR embedding_model = $3)
       ORDER BY embedding <=> $2::vector LIMIT 3`,
-    [agentId, toVector(vec)]
+    [agentId, toVector(vec), embeddingModelId()]
   );
   return rows.filter((r) => r.score >= minScore);
 }
 
-async function searchChunks(agentId: string, vec: number[]): Promise<Retrieved[]> {
+/**
+ * Hybrid retrieval: the passages closest in meaning (vector search, above RETRIEVAL_MIN_SCORE) and the passages sharing
+ * the question's words (keyword search: product codes, names, prices, Hindi and Hinglish words), merged with reciprocal
+ * rank fusion. HYBRID_SEARCH=off uses vector search only.
+ */
+async function searchChunks(agentId: string, vec: number[], text: string): Promise<Retrieved[]> {
   const k = Math.max(1, Math.round(envNum("RETRIEVAL_TOP_K", 6)));
   const minScore = envNum("RETRIEVAL_MIN_SCORE", 0.2);
-  const rows = await q<Retrieved>(
-    `SELECT c.id, c.content, c.page_title, c.page_url, s.title AS source_title,
-            1 - (c.embedding <=> $2::vector) AS score
-       FROM chunks c JOIN sources s ON s.id = c.source_id
-      WHERE c.agent_id = $1 AND s.status = 'ready'
-      ORDER BY c.embedding <=> $2::vector
-      LIMIT $3`,
-    [agentId, toVector(vec), k]
-  );
-  return rows.filter((r) => r.score >= minScore);
+  const pool = Math.max(k * 3, 20); // candidates per search before fusion
+  const cols = `c.id, c.content, c.page_title, c.page_url, s.title AS source_title, 1 - (c.embedding <=> $2::vector) AS score`;
+  // Vectors from another embedding model can't be compared, so only the current model's passages are searched.
+  const where = `c.agent_id = $1 AND s.status = 'ready' AND (c.embedding_model IS NULL OR c.embedding_model = $3)`;
+  const params = [agentId, toVector(vec), embeddingModelId()];
+  const tsq = env("HYBRID_SEARCH")?.toLowerCase() === "off" ? null : keywordQuery(text);
+
+  const [byMeaning, byWords] = await Promise.all([
+    q<Retrieved>(`SELECT ${cols} FROM chunks c JOIN sources s ON s.id = c.source_id WHERE ${where} ORDER BY c.embedding <=> $2::vector LIMIT ${pool}`, params),
+    tsq
+      ? q<Retrieved>(
+          `SELECT ${cols} FROM chunks c JOIN sources s ON s.id = c.source_id
+            WHERE ${where} AND c.tsv @@ to_tsquery('simple', $4)
+            ORDER BY ts_rank_cd(c.tsv, to_tsquery('simple', $4), 32) DESC LIMIT ${pool}`,
+          [...params, tsq]
+        )
+      : Promise.resolve([] as Retrieved[]),
+  ]);
+  const vector = byMeaning.filter((r) => r.score >= minScore);
+  const inVector = new Set(vector.map((r) => Number(r.id)));
+  // A passage found only by its words must share at least KEYWORD_MIN_COVERAGE (default half) of the question's words.
+  const minCover = envNum("KEYWORD_MIN_COVERAGE", 0.5);
+  const words = byWords.filter((r) => inVector.has(Number(r.id)) || keywordCoverage(text, r.content + " " + (r.page_title || r.source_title)) >= minCover);
+  const ranked: Retrieved[] = words.length
+    ? fuse([vector, words], (r) => Number(r.id)).map(({ item, in: lists }) => ({
+        ...item,
+        via: lists.length > 1 ? ("both" as const) : lists[0] === 0 ? ("vector" as const) : ("keyword" as const),
+      }))
+    : vector.map((r) => ({ ...r, via: "vector" as const }));
+  const unique = dropNearDuplicates(ranked);
+  if (rerankConfigured()) {
+    const candidates = unique.slice(0, 20);
+    const order = await rerank(text, candidates.map((c) => `${c.page_title || c.source_title}\n${c.content}`), k);
+    if (order) return order.map((i) => candidates[i]);
+  }
+  return unique.slice(0, k);
 }
 
 export function buildSystemPrompt(

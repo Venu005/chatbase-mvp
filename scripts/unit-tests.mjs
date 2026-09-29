@@ -7,7 +7,17 @@ import { formatForWhatsApp } from "../src/lib/wa-format.ts";
 import { decryptSecret, encryptSecret, safeEqual } from "../src/lib/crypto.ts";
 import { phoneFromSession, wantsHuman } from "../src/lib/handoff-intent.ts";
 import { createThinkFilter } from "../src/lib/providers/think.ts";
-import { normalizeTurns } from "../src/lib/providers/turns.ts";
+import { normalizeTurns, trimHistory } from "../src/lib/providers/turns.ts";
+import { newRun, resilientStream, withRetries } from "../src/lib/providers/resilient.ts";
+import { ProviderError } from "../src/lib/providers/types.ts";
+import { costUsd, embeddingCostUsd, parsePrices } from "../src/lib/pricing.ts";
+import { containsAny, isRefusal, normalize, percentile, rankOf, regressions, script } from "../src/lib/eval-score.ts";
+import { dropNearDuplicates, fuse, keywordCoverage, keywordQuery, keywordTerms } from "../src/lib/keywords.ts";
+import { rerank } from "../src/lib/rerank.ts";
+import { questionKey } from "../src/lib/cache-key.ts";
+import { isSmallTalk, route } from "../src/lib/routing.ts";
+import { looksClientRendered, looksScanned } from "../src/lib/content-checks.ts";
+import http from "node:http";
 import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
 import { csvCell, normalizeEmail, normalizePhone, parseContact, toCsv } from "../src/lib/leads.ts";
@@ -221,4 +231,209 @@ test("toCsv: quoting, Unicode, and spreadsheet-formula (CSV injection) defusing"
   assert.equal(csvCell("+919876543210"), "+919876543210");
   assert.equal(csvCell("रवि"), "रवि");
   assert.equal(csvCell(null), "");
+});
+
+test("trimHistory keeps the newest turns within the budget and caps long turns", () => {
+  const h = [
+    { role: "user", content: "a".repeat(3000) },
+    { role: "assistant", content: "b".repeat(1000) },
+    { role: "user", content: "c".repeat(1000) },
+  ];
+  const t = trimHistory(h, 2600);
+  assert.deepEqual(t.map((m) => m.content[0]), ["b", "c"], "the oldest turn that doesn't fit is dropped; order is kept");
+  assert.equal(trimHistory(h, 10_000)[0].content.length, 1501, "long turns are capped at 1,500 characters (+ …)");
+  assert.deepEqual(trimHistory(h, 0), []);
+});
+
+// ---- resilient model calls --------------------------------------------------------------------------
+/** A fake chat model: `script` lists, per call, either an error to throw before the first token or the words to send. */
+function fakeLLM(name, script, opts = {}) {
+  let call = 0;
+  return {
+    name,
+    model: `${name}-model`,
+    calls: () => call,
+    async *stream({ signal, onUsage }) {
+      const step = script[Math.min(call++, script.length - 1)];
+      if (step === "hang") await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+      if (step instanceof Error) throw step;
+      for (const [i, w] of step.entries()) {
+        if (opts.breakAfter !== undefined && i === opts.breakAfter) throw new ProviderError("broke", 502);
+        yield w;
+      }
+      onUsage?.({ inputTokens: 10, outputTokens: step.length });
+    },
+  };
+}
+const collect = async (gen) => {
+  let out = "";
+  for await (const d of gen) out += d;
+  return out;
+};
+process.env.LLM_RETRIES = "2";
+
+test("resilientStream: retries rate limits with backoff, then answers", async () => {
+  const llm = fakeLLM("p", [new ProviderError("429", 429), new ProviderError("503", 503), ["ok", "!"]]);
+  const run = newRun();
+  assert.equal(await collect(resilientStream({ system: "", messages: [] }, llm, null, run)), "ok!");
+  assert.equal(run.attempts, 3);
+  assert.equal(run.errors.length, 2);
+  assert.deepEqual(run.usage, { inputTokens: 10, outputTokens: 2 });
+  assert.equal(run.fallbackUsed, false);
+  assert.ok(run.firstTokenMs >= 0);
+});
+
+test("resilientStream: a bad key isn't retried but goes straight to the backup model", async () => {
+  const llm = fakeLLM("p", [new ProviderError("401", 401)]);
+  const backup = fakeLLM("b", [["from backup"]]);
+  const run = newRun();
+  assert.equal(await collect(resilientStream({ system: "", messages: [] }, llm, backup, run)), "from backup");
+  assert.equal(llm.calls(), 1);
+  assert.equal(run.fallbackUsed, true);
+  assert.equal(run.provider, "b");
+});
+
+test("resilientStream: gives up after retries when there is no backup", async () => {
+  const llm = fakeLLM("p", [new ProviderError("500", 500)]);
+  await assert.rejects(collect(resilientStream({ system: "", messages: [] }, llm, null, newRun())), /500/);
+  assert.equal(llm.calls(), 3);
+});
+
+test("resilientStream: never retries once text has reached the customer", async () => {
+  const llm = fakeLLM("p", [["one ", "two ", "three"]], { breakAfter: 2 });
+  let got = "";
+  await assert.rejects(async () => {
+    for await (const d of resilientStream({ system: "", messages: [] }, llm, fakeLLM("b", [["x"]]), newRun())) got += d;
+  }, /broke/);
+  assert.equal(got, "one two ");
+  assert.equal(llm.calls(), 1);
+});
+
+test("resilientStream: a model that never starts answering times out and is retried", async () => {
+  process.env.LLM_FIRST_TOKEN_TIMEOUT_MS = "50";
+  const llm = fakeLLM("p", ["hang", ["late but fine"]]);
+  const run = newRun();
+  assert.equal(await collect(resilientStream({ system: "", messages: [] }, llm, null, run)), "late but fine");
+  assert.match(run.errors[0], /timed out/);
+  delete process.env.LLM_FIRST_TOKEN_TIMEOUT_MS;
+});
+
+test("withRetries: retries retryable errors only", async () => {
+  let n = 0;
+  assert.equal(await withRetries(async () => (++n < 3 ? Promise.reject(new ProviderError("429", 429)) : "done"), { baseMs: 1 }), "done");
+  let m = 0;
+  await assert.rejects(withRetries(async () => (m++, Promise.reject(new ProviderError("400", 400))), { baseMs: 1 }), /400/);
+  assert.equal(m, 1);
+});
+
+test("pricing: LLM_PRICES parsing and cost per call", () => {
+  const prices = parsePrices("gpt-4.1-mini=0.40/1.60, Claude-Haiku-4-5 = 1/5, junk, x=1");
+  assert.equal(prices.size, 2);
+  assert.equal(costUsd(prices, "openai-compatible", "gpt-4.1-mini", 1_000_000, 500_000), 1.2);
+  assert.equal(costUsd(prices, "anthropic", "claude-haiku-4-5", 2000, 300), 0.0035);
+  assert.equal(costUsd(prices, "anthropic", "unknown-model", 1000, 1000), null, "no price configured");
+  assert.equal(costUsd(prices, "mock", "mock", 1000, 1000), 0);
+  assert.equal(embeddingCostUsd(0.02, "openai-compatible", 1_000_000), 0.02);
+  assert.equal(embeddingCostUsd(undefined, "openai-compatible", 10), null);
+});
+
+test("eval scoring: normalising, refusals, scripts, ranks, regressions", () => {
+  assert.equal(normalize("  Up to ₹2,000  per  Order "), "up to ₹2000 per order");
+  assert.ok(containsAny("COD is available up to ₹2000", ["2,000"]));
+  assert.ok(!containsAny("We open at 7am", ["10pm"]));
+  for (const t of ["I don't have information about that.", "Sorry, please contact the store.", "मुझे इसकी जानकारी नहीं है", "iske baare mein nahi pata"]) assert.ok(isRefusal(t), t);
+  assert.ok(!isRefusal("Yes, we deliver to Domlur in 2 hours."));
+  assert.equal(script("हम दो घंटे में डिलीवरी करते हैं (2 hours)"), "devanagari");
+  assert.equal(script("haan, COD milta hai"), "latin");
+  assert.equal(rankOf(["a", "Price AA-5K ₹265", "x"], "aa-5k"), 2);
+  assert.equal(rankOf(["a"], "zzz"), 0);
+  assert.equal(percentile([5, 1, 3, 2, 4], 50), 3);
+  assert.equal(percentile([5, 1, 3, 2, 4], 95), 5);
+  assert.deepEqual(regressions({ answer_rate: 0.7, retrieval_hit_rate: 0.9, avg_tokens: 900 }, { answer_rate: 0.8, retrieval_hit_rate: 0.92, avg_tokens: 100 }), ["answer_rate: 80.0% → 70.0%"]);
+});
+
+test("keywords: terms, Hinglish equivalents, product codes and Hindi; tsquery building", () => {
+  assert.deepEqual(keywordTerms("How much is AM-B500?"), ["am-b500"]);
+  assert.deepEqual(keywordTerms("atta ka rate kya hai?"), ["atta", "rate", "price"]);
+  assert.deepEqual(keywordTerms("डिलीवरी में कितना समय लगता है?"), ["डिलीवरी", "समय", "लगता"]);
+  assert.equal(keywordQuery("What is the?"), null, "only filler words: no keyword search");
+  assert.equal(keywordQuery("sunday AA-5K it's"), "'sunday':* | 'aa-5k'", "filler and one-letter words are dropped");
+});
+
+test("keywordCoverage: keyword-only matches need a real share of the question's words", () => {
+  const prices = "Aashirvaad Whole Wheat Atta 5 kg (code AA-5K): ₹265. Price list";
+  assert.equal(keywordCoverage("atta ka rate kya hai", prices), 1);
+  assert.equal(keywordCoverage("price of aa-5k?", prices), 1);
+  assert.ok(keywordCoverage("recommend a good pizza place nearby", "Orders placed after 8pm are delivered the next morning.") < 0.5);
+  assert.equal(keywordCoverage("sunday timings", "Open every day, including Sundays"), 0.5, "prefix match: sunday ~ Sundays");
+});
+
+test("fuse (reciprocal rank fusion): agreement between lists wins", () => {
+  const r = fuse([["a", "b", "c"], ["c", "d"]], (x) => x);
+  assert.equal(r[0].item, "c", "c is in both lists");
+  assert.deepEqual(r[0].in, [0, 1]);
+  assert.deepEqual(r.map((x) => x.item).sort(), ["a", "b", "c", "d"]);
+});
+
+test("dropNearDuplicates keeps the best-ranked copy of repeated boilerplate", () => {
+  const footer = "Sharma Kirana, 12 CMH Road, Indiranagar. Call +91 98450 12345. Open 7am to 10pm.";
+  const r = dropNearDuplicates([{ id: 1, content: footer }, { id: 2, content: "Atta 5 kg costs ₹265." }, { id: 3, content: footer + " " }, { id: 4, content: footer.replace("7am", "8am") }]);
+  assert.deepEqual(r.map((x) => x.id), [1, 2]);
+});
+
+test("rerank: Cohere/Jina-style API reorders candidates; failures keep the original order", async () => {
+  let body = null;
+  const server = http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", (d) => (raw += d));
+    req.on("end", () => {
+      body = JSON.parse(raw);
+      if (body.query === "fail") return (res.statusCode = 500), res.end("boom");
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ results: [{ index: 2, relevance_score: 0.9 }, { index: 0, relevance_score: 0.4 }] }));
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  Object.assign(process.env, { RERANK_API_KEY: "k", RERANK_MODEL: "rerank-test", RERANK_BASE_URL: `http://127.0.0.1:${server.address().port}` });
+  try {
+    assert.deepEqual(await rerank("atta price", ["a", "b", "c"], 2), [2, 0]);
+    assert.equal(body.model, "rerank-test");
+    assert.equal(body.top_n, 2);
+    assert.equal(await rerank("fail", ["a", "b"], 2), null, "server error: keep the fused order");
+    delete process.env.RERANK_API_KEY;
+    assert.equal(await rerank("x", ["a", "b"], 2), null, "not configured");
+  } finally {
+    server.close();
+  }
+});
+
+test("questionKey: same question in any casing/punctuation, but words, numbers and script matter", () => {
+  assert.equal(questionKey("What are your timings?"), questionKey("  what are your TIMINGS "));
+  assert.equal(questionKey("COD milta hai kya??"), "cod milta hai kya");
+  assert.notEqual(questionKey("Price of AA-5K"), questionKey("Price of AA-10K"));
+  assert.equal(questionKey("डिलीवरी कब होगी?"), "डिलीवरी कब होगी");
+  assert.notEqual(questionKey("delivery kab hogi"), questionKey("डिलीवरी कब होगी"));
+  assert.equal(questionKey("???"), null);
+  assert.equal(questionKey("x".repeat(201)), null, "long questions aren't cached");
+});
+
+test("routing: small talk (English, Hinglish, Hindi) and close Q&A matches go to the small model", () => {
+  for (const t of ["hi", "Hello!", "thanks a lot 🙏", "Thank you so much", "ok", "okk", "dhanyavaad ji", "shukriya", "धन्यवाद", "bye", "good morning sir"]) assert.ok(isSmallTalk(t), t);
+  for (const t of ["hi, what are your timings?", "thanks, and the 10 kg one?", "hello? anyone there?", "ok so do you deliver to Domlur", "is the shop open"]) assert.ok(!isSmallTalk(t), t);
+  assert.equal(route("thanks!", null), "small");
+  assert.equal(route("Do you deliver on Sunday?", 0.93), "small");
+  assert.equal(route("Do you deliver on Sunday?", 0.6), "main");
+  assert.equal(route("What is the refund policy?", null), "main");
+});
+
+test("content checks: scanned PDFs and JavaScript app shells are recognised", () => {
+  assert.ok(looksScanned({ text: "", pages: 3 }));
+  assert.ok(looksScanned({ text: "Page 1", pages: 1 }));
+  assert.ok(!looksScanned({ text: "Warranty: every wallet carries a two year warranty against stitching defects.", pages: 1 }), "a short real PDF");
+  assert.ok(!looksScanned({ text: "Refunds are credited within 5 working days. ".repeat(4), pages: 1 }));
+  assert.ok(looksClientRendered('<div id="root"></div><script src="/a.js"></script>', 0));
+  assert.ok(looksClientRendered('<div id="__next"></div><script>1</script>', 12));
+  assert.ok(looksClientRendered("<noscript>Please enable JavaScript</noscript><script></script>", 40));
+  assert.ok(!looksClientRendered("<main>" + "Real text. ".repeat(40) + "</main><script></script>", 440), "plenty of text: fine as is");
+  assert.ok(!looksClientRendered("<p>Short page</p>", 10), "no scripts: not an app shell");
 });

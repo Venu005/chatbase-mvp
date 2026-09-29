@@ -23,7 +23,7 @@ type Agent = {
   lead_fields: ("name" | "email" | "phone")[];
   lead_message: string;
 };
-type Source = { id: string; type: string; title: string; url: string | null; status: "processing" | "ready" | "failed"; error: string | null; char_count: number; chunk_count: number };
+type Source = { id: string; type: string; title: string; url: string | null; status: "processing" | "ready" | "failed"; error: string | null; char_count: number; chunk_count: number; retryable: boolean };
 type Convo = {
   id: string;
   channel: string;
@@ -144,10 +144,13 @@ function SourcesTab({ agentId }: { agentId: string }) {
   const [pages, setPages] = useState(1);
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
+  const [acceptsImages, setAcceptsImages] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setSources((await api<{ sources: Source[] }>(`/api/agents/${agentId}/sources`)).sources);
+      const r = await api<{ sources: Source[]; acceptsImages: boolean }>(`/api/agents/${agentId}/sources`);
+      setSources(r.sources);
+      setAcceptsImages(r.acceptsImages);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -222,7 +225,14 @@ function SourcesTab({ agentId }: { agentId: string }) {
             </select>
           </div>
         )}
-        {mode === "file" && <input type="file" name="file" accept=".pdf,.txt,.md,.csv" />}
+        {mode === "file" && (
+          <>
+            <input type="file" name="file" accept={`.pdf,.txt,.md,.csv${acceptsImages ? ",.jpg,.jpeg,.png,.webp" : ""}`} />
+            <span className="muted small">
+              PDF, TXT, MD or CSV up to 10 MB{acceptsImages ? ". Scanned PDFs and photos (JPG, PNG) of price lists or menus are read automatically." : "."}
+            </span>
+          </>
+        )}
         {mode === "text" && (
           <>
             <input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title, e.g. Refund policy" maxLength={120} />
@@ -242,11 +252,11 @@ function SourcesTab({ agentId }: { agentId: string }) {
               <div className="muted small">
                 {s.type.toUpperCase()}
                 {s.status === "ready" && ` · ${s.chunk_count} passages`}
-                {s.status === "failed" && s.error && ` · ${s.error}`}
+                {(s.status === "failed" || s.status === "processing") && s.error && ` · ${s.error}`}
               </div>
             </div>
             <span className={`badge ${s.status}`}>{s.status}</span>
-            {s.status === "failed" && s.type === "url" && (
+            {s.status === "failed" && s.retryable && (
               <button className="link-btn" onClick={() => retry(s.id)}>Retry</button>
             )}
             <button className="link-btn" onClick={() => remove(s.id)}>Remove</button>

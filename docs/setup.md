@@ -75,7 +75,29 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `EMBEDDING_DIM` | `1536` | Vector size of the model. **Fixed when you first run `pnpm migrate`.** |
 | `EMBEDDING_SEND_DIMENSIONS` | `false` | `true` for models that accept a `dimensions` parameter. |
 | `RETRIEVAL_TOP_K` | `6` | How many passages are given to the model per question. |
+| `INGEST_CONCURRENCY`, `INGEST_MAX_ATTEMPTS`, `INGEST_RETRY_BASE_MS` | `2`, `3`, `30000` | Ingestion queue: jobs at once per server, attempts for transient failures, first retry delay (doubles each time). |
+| `INGEST_WORKER` | on | `off` stops this server from running ingestion jobs (for example on a web-only instance). |
+| `ADMIN_EMAILS` | none | Comma-separated e-mails that can open the admin view at `/admin` ([admin.md](admin.md)). |
+| `LLM_PRICES` | none | USD per million input/output tokens by model id, e.g. `gpt-4.1-mini=0.40/1.60, claude-haiku-4-5=1/5`. Used for cost tracking; models without a price show tokens only. |
+| `EMBEDDING_PRICE_PER_MTOK` | none | USD per million embedded tokens. |
+| `USD_INR_RATE` | none | Also show costs in rupees in the admin view. |
+| `LLM_FIRST_TOKEN_TIMEOUT_MS`, `LLM_TIMEOUT_MS` | `20000`, `90000` | Time limits for the first word of an answer and for the whole answer. |
+| `LLM_RETRIES` | `2` | Retries (with backoff) for rate limits, overload, server errors and timeouts, only before any text reaches the customer. |
+| `LLM_FALLBACK_PROVIDER`, `LLM_FALLBACK_MODEL` | off | Backup model used when the main one keeps failing (for example `openai` with a small model). |
+| `LLM_SMALL_PROVIDER`, `LLM_SMALL_MODEL`, `ROUTE_FIX_SCORE` | off, –, `0.8` | Cheaper model for small talk ("hi", "thanks", "dhanyavaad") and questions a Q&A answer matches closely. Small talk never triggers a search either way. |
+| `LLM_MAX_TOKENS` | `1024` (anthropic) | Longest answer in tokens. |
+| `OPENAI_STREAM_USAGE` | `true` | Ask OpenAI-compatible servers to report token usage; set `false` for a server that rejects `stream_options`. |
+| `HISTORY_MAX_CHARS` | `6000` | How much of the conversation (newest first) is sent with each question. |
+| `EMBEDDING_TIMEOUT_MS`, `EMBEDDING_RETRIES` | `30000`, `3` | Time limit and retries for embedding calls. |
 | `RETRIEVAL_MIN_SCORE` | `0.2` (`0.1` in `.env.example`) | Passages scoring below this similarity are ignored. Tune per embedding model. |
+| `CHUNK_SIZE`, `CHUNK_OVERLAP` | `900`, `120` | Passage size and overlap in characters, for newly indexed sources. Tune with `pnpm eval`. |
+| `OCR_PROVIDER`, `OCR_MODEL`, `OCR_API_KEY`, `OCR_BASE_URL`, `OCR_TIMEOUT_MS` | off | Read scanned PDFs and photos (JPG, PNG, WEBP) of price lists and menus with a vision model: `openai` (any compatible API) or `anthropic`. Enables image uploads. |
+| `PRERENDER_URL`, `PRERENDER_TIMEOUT_MS` | off, `30000` | A rendering service (URL containing `{url}`, returning rendered HTML) for websites that build their pages with JavaScript. Without it such sites fail with a clear message. |
+| `ANSWER_CACHE`, `ANSWER_CACHE_TTL_HOURS` | on, `24` | Reuse the answer to a visitor's first question asked word for word before (not in the playground). Invalidated automatically when sources, Q&A answers, instructions, the prompt or the model change. |
+| `HYBRID_SEARCH` | on | Keyword search next to meaning search, merged by rank (product codes, names, prices, Hindi and Hinglish words). `off` = meaning only. |
+| `KEYWORD_MIN_COVERAGE` | `0.5` | A passage found only by keywords must contain this share of the question's meaningful words. |
+| `RERANK_API_KEY`, `RERANK_MODEL`, `RERANK_BASE_URL`, `RERANK_TIMEOUT_MS` | off, –, `https://api.cohere.com/v2`, `3000` | Optional reranking of the merged results with a Cohere- or Jina-compatible `/rerank` API. Falls back to the merged order on any failure. |
+| `QUERY_REWRITE`, `QUERY_REWRITE_PROVIDER`, `QUERY_REWRITE_MODEL`, `QUERY_REWRITE_TIMEOUT_MS` | `off`, main provider, main model, `2500` | Rewrite follow-up questions into standalone search queries with a (small) model before searching. |
 | `ANSWER_FIX_MIN_SCORE` | `0.5` | How similar a visitor's question must be to a Q&A answer's question for the owner's answer to be used. Raise it if Q&A answers show up for unrelated questions. |
 
 ### WhatsApp (guides: [whatsapp.md](whatsapp.md), [embedded-signup.md](embedded-signup.md))

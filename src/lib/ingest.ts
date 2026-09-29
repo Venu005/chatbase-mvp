@@ -2,9 +2,13 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import * as cheerio from "cheerio";
 import { extractText, getDocumentProxy } from "unpdf";
-import { q, toVector } from "./db";
+import { toVector, tx } from "./db";
 import { chunkText, normalizeText } from "./chunk";
-import { embedAll } from "./providers";
+import { looksClientRendered } from "./content-checks";
+export { looksScanned } from "./content-checks";
+import { env, envNum } from "./env";
+import { embedAll, embeddingModelId, getEmbedder } from "./providers";
+import { recordIngest } from "./ai-log";
 
 export type Doc = { title: string; url: string | null; text: string };
 
@@ -123,9 +127,21 @@ export function htmlToDoc(html: string, pageUrl: URL): { doc: Doc; links: string
 }
 
 export async function pdfToText(buf: Uint8Array): Promise<string> {
+  return (await pdfText(buf)).text;
+}
+
+export async function pdfText(buf: Uint8Array): Promise<{ text: string; pages: number }> {
   const pdf = await getDocumentProxy(new Uint8Array(buf));
-  const { text } = await extractText(pdf, { mergePages: true });
-  return normalizeText(Array.isArray(text) ? text.join("\n\n") : text);
+  const { text, totalPages } = await extractText(pdf, { mergePages: true });
+  return { text: normalizeText(Array.isArray(text) ? text.join("\n\n") : text), pages: totalPages };
+}
+
+/** Fetches a page through the rendering service (PRERENDER_URL with {url}), which runs its JavaScript. */
+async function prerender(url: string): Promise<string> {
+  const template = env("PRERENDER_URL")!;
+  const res = await fetch(template.replace("{url}", encodeURIComponent(url)), { signal: AbortSignal.timeout(envNum("PRERENDER_TIMEOUT_MS", 30_000)) });
+  if (!res.ok) throw new Error(`Rendering ${url} failed with HTTP ${res.status}`);
+  return readLimited(res).then((b) => b.toString("utf8"));
 }
 
 export async function fetchDocs(startUrl: string, maxPages: number): Promise<Doc[]> {
@@ -141,7 +157,15 @@ export async function fetchDocs(startUrl: string, maxPages: number): Promise<Doc
       if (contentType.includes("application/pdf")) {
         docs.push({ title: url.pathname.split("/").pop() || url.href, url: url.href, text: await pdfToText(body) });
       } else if (contentType.includes("html")) {
-        const { doc, links } = htmlToDoc(body.toString("utf8"), url);
+        const html = body.toString("utf8");
+        let { doc, links } = htmlToDoc(html, url);
+        if (looksClientRendered(html, doc.text.length)) {
+          if (env("PRERENDER_URL")) ({ doc, links } = htmlToDoc(await prerender(url.href), url));
+          else if (next === startUrl)
+            throw new PermanentIngestError(
+              "This website builds its pages with JavaScript, so its text couldn't be read directly. Upload a PDF or paste the text instead (or ask the platform admin to set up page rendering)."
+            );
+        }
         if (doc.text.length > 30) docs.push(doc);
         for (const l of links) if (!seen.has(l) && seen.size < limit * 10) (seen.add(l), queue.push(l));
       } else if (contentType.startsWith("text/")) {
@@ -159,35 +183,55 @@ export async function fetchDocs(startUrl: string, maxPages: number): Promise<Doc
 }
 
 // ---------------------------------------------------------------------------
-// Chunk -> embed -> store. Updates the source row to ready / failed.
+// Chunk -> embed -> store (one transaction, so a retried job never leaves duplicates or half a source).
+// Throws on failure; the ingestion queue decides whether to retry.
 // ---------------------------------------------------------------------------
-export async function indexDocs(sourceId: string, agentId: string, docs: Doc[]): Promise<void> {
+export async function writeChunks(sourceId: string, agentId: string, docs: Doc[]): Promise<{ chars: number; chunks: number }> {
+  const pieces: { title: string; url: string | null; content: string }[] = [];
+  let chars = 0;
+  for (const d of docs) {
+    chars += d.text.length;
+    for (const content of chunkText(d.text, envNum("CHUNK_SIZE", 900), envNum("CHUNK_OVERLAP", 120))) pieces.push({ title: d.title, url: d.url, content });
+  }
+  if (!pieces.length) throw new PermanentIngestError("No readable text found in this source");
+  if (pieces.length > 5000) throw new PermanentIngestError("Source is too large (more than 5,000 chunks)");
+
+  const embedder = getEmbedder();
+  const model = embeddingModelId();
+  const embedChars = pieces.reduce((n, p) => n + p.content.length, 0);
+  const t0 = Date.now();
+  let vectors: number[][];
   try {
-    const pieces: { title: string; url: string | null; content: string }[] = [];
-    let chars = 0;
-    for (const d of docs) {
-      chars += d.text.length;
-      for (const content of chunkText(d.text)) pieces.push({ title: d.title, url: d.url, content });
-    }
-    if (!pieces.length) throw new Error("No readable text found in this source");
-    if (pieces.length > 5000) throw new Error("Source is too large (more than 5,000 chunks)");
+    // Each passage is embedded with its page/source title, so a passage that never repeats its topic ("₹265") still
+    // carries it ("Price list"). The stored content stays as it was.
+    vectors = await embedAll(pieces.map((p) => (p.title ? `${p.title}\n${p.content}` : p.content)));
+  } catch (e) {
+    await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "error", error: (e as Error).message });
+    throw e;
+  }
+  await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "ok" });
 
-    const vectors = await embedAll(pieces.map((p) => p.content));
-
+  await tx(async (query) => {
+    await query("DELETE FROM chunks WHERE source_id = $1", [sourceId]);
     const BATCH = 100;
     for (let i = 0; i < pieces.length; i += BATCH) {
       const slice = pieces.slice(i, i + BATCH);
       const params: unknown[] = [];
       const values = slice.map((p, j) => {
-        const o = j * 6;
-        params.push(sourceId, agentId, p.title, p.url, p.content, toVector(vectors[i + j]));
-        return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6}::vector)`;
+        const o = j * 7;
+        params.push(sourceId, agentId, p.title, p.url, p.content, toVector(vectors[i + j]), model);
+        return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6}::vector,$${o + 7})`;
       });
-      await q(`INSERT INTO chunks (source_id, agent_id, page_title, page_url, content, embedding) VALUES ${values.join(",")}`, params);
+      await query(`INSERT INTO chunks (source_id, agent_id, page_title, page_url, content, embedding, embedding_model) VALUES ${values.join(",")}`, params);
     }
-    await q("UPDATE sources SET status='ready', error=NULL, char_count=$2, chunk_count=$3, updated_at=now() WHERE id=$1", [sourceId, chars, pieces.length]);
-  } catch (e) {
-    await q("DELETE FROM chunks WHERE source_id=$1", [sourceId]).catch(() => {});
-    await q("UPDATE sources SET status='failed', error=$2, updated_at=now() WHERE id=$1", [sourceId, String((e as Error).message).slice(0, 500)]).catch(() => {});
+  });
+  return { chars, chunks: pieces.length };
+}
+
+/** An ingestion failure that retrying can't fix (a 404 page, an empty file...). */
+export class PermanentIngestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermanentIngestError";
   }
 }

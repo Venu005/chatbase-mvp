@@ -3,8 +3,9 @@ import { z } from "zod";
 import { HttpError, clientIp, handle, rateLimit } from "@/lib/http";
 import { getUser } from "@/lib/auth";
 import { q1 } from "@/lib/db";
-import { getLLM } from "@/lib/providers";
-import { loadAgent, prepareAnswer, saveAnswer, usedCitations } from "@/lib/answer";
+import { cacheAnswer, loadAgent, prepareAnswer, saveAnswer, streamAnswer, usedCitations } from "@/lib/answer";
+import { newRun } from "@/lib/providers/resilient";
+import { recordAnswer } from "@/lib/ai-log";
 import { refundCredit } from "@/lib/usage";
 
 export const runtime = "nodejs";
@@ -58,30 +59,35 @@ export const POST = handle<Ctx>(async (req, { params }) => {
     });
   }
 
-  const llm = getLLM();
   const abort = new AbortController();
+  const run = newRun();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let answer = "";
       let failed = false;
       let saved = false;
+      let messageId: number | null = null;
+      let error: unknown = null;
       try {
-        for await (const delta of llm.stream({ system: prepared.system, messages: prepared.history, signal: abort.signal })) {
+        for await (const delta of streamAnswer(prepared, run, abort.signal)) {
           answer += delta;
           controller.enqueue(line({ type: "delta", text: delta }));
         }
         if (!answer.trim()) throw new Error("The model returned an empty reply");
         saved = true;
-        const messageId = await saveAnswer(prepared, answer).catch((e) => (console.error("Saving reply failed:", e), null));
+        messageId = await saveAnswer(prepared, answer).catch((e) => (console.error("Saving reply failed:", e), null));
         controller.enqueue(line({ type: "done", citations: usedCitations(answer, prepared), conversationId: prepared.conversationId, messageId }));
       } catch (e) {
+        error = abort.signal.aborted ? new Error("The visitor closed the chat before the answer finished") : e;
         failed = !answer;
         console.error("Chat generation failed:", e);
         if (!abort.signal.aborted) controller.enqueue(line({ type: "error", message: "Sorry, I couldn't answer that right now. Please try again." }));
       } finally {
-        if (!saved && answer.trim()) await saveAnswer(prepared, answer).catch((e) => console.error("Saving reply failed:", e)); // partial answer (client left or stream broke)
+        if (!saved && answer.trim()) messageId = await saveAnswer(prepared, answer).catch((e) => (console.error("Saving reply failed:", e), null)); // partial answer (client left or stream broke)
         if (failed) await refundCredit(agent.user_id).catch(() => {});
+        await recordAnswer(prepared, run, { status: !error ? "ok" : answer.trim() ? "partial" : "error", messageId, error, answer });
+        if (!error) await cacheAnswer(prepared, run, answer);
         try {
           controller.close();
         } catch {

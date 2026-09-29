@@ -18,6 +18,11 @@ They need Postgres migrated, and a production build of the app running with the 
 pnpm build
 # terminal 1: start the app with the fake-service settings the scripts expect
 SIGNUP_RATE_LIMIT=1000 \
+LLM_FIRST_TOKEN_TIMEOUT_MS=2000 LLM_FALLBACK_PROVIDER=mock LLM_FALLBACK_MODEL=backup INGEST_RETRY_BASE_MS=1000 \
+LLM_SMALL_PROVIDER=mock LLM_SMALL_MODEL=small \
+OCR_PROVIDER=openai OCR_MODEL=fake-vision OCR_API_KEY=ocr-test OCR_BASE_URL=http://127.0.0.1:4060/v1 \
+'PRERENDER_URL=http://127.0.0.1:4060/render?url={url}' \
+ADMIN_EMAILS=admin@smoke.test \
 WHATSAPP_GRAPH_BASE_URL=http://127.0.0.1:4020 \
 SARVAM_API_KEY=sarvam-test-key SARVAM_STT_URL=http://127.0.0.1:4020/speech-to-text \
 SMTP_URL=smtp://127.0.0.1:4025 EMAIL_FROM="Bot <bot@example.com>" \
@@ -29,6 +34,7 @@ pnpm start
 
 # terminal 2
 pnpm smoke             # accounts, ingestion, RAG answers, isolation, limits, widget, rate limits
+pnpm smoke:ai          # AI pipeline: retries, timeouts, backup model, usage and cost records, admin view
 pnpm smoke:features    # 👍/👎 feedback, Q&A answers, analytics, lead capture and CSV
 pnpm smoke:account     # password reset e-mails and links, allowed websites for the widget
 pnpm smoke:whatsapp    # manual WhatsApp connection, webhook signatures, dedupe, replies, credits
@@ -40,3 +46,61 @@ pnpm smoke:sarvam      # Sarvam provider (starts its own app copy on port 3010; 
 
 Run them against a scratch database, not production. They create accounts and agents with random names.
 `ALLOW_PRIVATE_URLS=true` in your `.env` additionally lets `pnpm smoke` test website crawling against a local page.
+
+## Answer-quality evaluation
+
+`pnpm eval` runs a dataset of real customer questions through the actual answer pipeline (retrieval, prompt, model, retries)
+with the models in your `.env`, and scores it. It needs only the database, not a running server: it creates a temporary
+account and agent, indexes the dataset's sources, asks every question as a new visitor, then deletes the account.
+
+```bash
+pnpm eval                            # eval/datasets/kirana.json: 32 questions in English, Hindi and Hinglish
+pnpm eval -- --save-baseline         # remember these scores for this dataset + model combination
+pnpm eval -- --check                 # exit 1 if any rate is >5 points below the baseline (use in CI)
+pnpm eval -- --judge                 # also grade groundedness with EVAL_JUDGE_PROVIDER / EVAL_JUDGE_MODEL
+pnpm eval -- --only sku,hinglish     # only some categories (or question ids)
+```
+
+| Score | Meaning |
+| --- | --- |
+| hit@k, top1, MRR | The passage that holds the answer was among those given to the model (top1: it came first) |
+| answer | The reply contains an expected fact (a price, a time...) and doesn't decline |
+| refuse | For questions the sources don't cover, the assistant says it doesn't know instead of inventing |
+| lang | The reply uses the customer's script (Devanagari for Hindi, Latin for English and Hinglish) |
+| grounded | (`--judge`) A grader model found no claims the passages don't support |
+
+Results are printed by category (direct, paraphrase, product code, product, follow-up, Hinglish, Hindi, out of scope) and
+saved to `eval/results/`. Baselines live in `eval/baselines/`, one per dataset and model combination. **Only numbers from real
+models mean anything**: the mock embeddings match shared words, so paraphrases and Hinglish fail by design. Run it with your
+production models before and after every prompt, retrieval or model change, and add your customers' real questions to a
+dataset of your own (same JSON format).
+
+### Comparing models
+
+Baselines are kept per dataset **and** model combination (`eval/baselines/<dataset>__<chat model>_<embedding model>.json`),
+so you can compare setups side by side:
+
+1. Point `.env` at the candidate (for example `EMBEDDING_MODEL=text-embedding-3-large`, or a multilingual model such as
+   BGE-M3 behind an OpenAI-compatible server) and run `pnpm eval -- --save-baseline`.
+2. Repeat for each candidate, then compare the saved files (retrieval hit@k and MRR for embeddings; answer, refusal,
+   language and grounded rates, time to first word and cost per answer for chat models).
+3. An embedding model with a **different dimension** needs its own database (the vector column's size is fixed by
+   `EMBEDDING_DIM` at `pnpm migrate`): use a scratch `DATABASE_URL` for the comparison.
+
+For Hindi and Hinglish customers, look at the `hindi` and `hinglish` rows specifically: English-only embedding models
+often do well overall and poorly there.
+
+### Kirana dataset, mock models
+
+What the retrieval changes did on `eval/datasets/kirana.json` with the offline mock models (the mock embeddings match
+shared words, so paraphrase scores understate what real models achieve):
+
+| Stage | hit@k | top-1 | MRR | answer | refuse |
+| --- | --- | --- | --- | --- | --- |
+| Vector search only | 50% | 43% | 0.46 | 46% | 100% |
+| + keyword search (hybrid, RRF) | 93% | 79% | 0.86 | 75% | 50% |
+| + keyword coverage rule | 86% | 75% | 0.80 | 75% | 100% |
+| + filler-word tuning (current) | 89% | 75% | 0.82 | 71%* | 100% |
+
+\* The mock answers from the first 400 characters of the top passage only, so some correct retrievals score as wrong
+answers; retrieval scores are the reliable signal with the mock.
