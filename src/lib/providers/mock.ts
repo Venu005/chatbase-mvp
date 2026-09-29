@@ -26,7 +26,8 @@ export function mockEmbedText(text: string, dim: number): number[] {
   return v.map((x) => x / norm);
 }
 
-// Fault injection for tests: a text containing [[mock:embed-fail-N]] makes the first N embedding calls for it fail (503).
+// Fault injection for tests: a text containing [[mock:embed-fail-N]] makes the first N embedding calls for that text fail
+// (503). Keyed by the whole text, so tests can repeat against the same server by varying the text.
 const embedFailures = new Map<string, number>();
 
 export function mockEmbeddings(dim: number): EmbeddingProvider {
@@ -37,8 +38,8 @@ export function mockEmbeddings(dim: number): EmbeddingProvider {
     embed: async (texts) => {
       for (const t of texts) {
         const m = t.match(/\[\[mock:embed-fail-(\d+)\]\]/);
-        if (m && (embedFailures.get(m[0]) ?? 0) < Number(m[1])) {
-          embedFailures.set(m[0], (embedFailures.get(m[0]) ?? 0) + 1);
+        if (m && (embedFailures.get(t) ?? 0) < Number(m[1])) {
+          embedFailures.set(t, (embedFailures.get(t) ?? 0) + 1);
           throw new ProviderError("Mock embedding failure", 503);
         }
       }
@@ -100,7 +101,7 @@ export function mockChat(model = "mock"): LLMProvider {
           ? `(mock model) Based on your sources: ${first[1].trim().slice(0, 400)} [1]`
           : `(mock model) I don't have information about "${question.slice(0, 60)}" in my sources yet.`;
       }
-      if (isFallback) answer = answer.replace("(mock model)", `(mock fallback: ${model})`);
+      if (isFallback) answer = answer.replace("(mock model)", `(mock ${model})`); // e.g. "(mock backup)", "(mock small)"
 
       let sent = 0;
       for (const word of answer.split(/(\s+)/)) {

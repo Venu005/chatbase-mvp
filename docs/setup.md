@@ -84,6 +84,7 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `LLM_FIRST_TOKEN_TIMEOUT_MS`, `LLM_TIMEOUT_MS` | `20000`, `90000` | Time limits for the first word of an answer and for the whole answer. |
 | `LLM_RETRIES` | `2` | Retries (with backoff) for rate limits, overload, server errors and timeouts, only before any text reaches the customer. |
 | `LLM_FALLBACK_PROVIDER`, `LLM_FALLBACK_MODEL` | off | Backup model used when the main one keeps failing (for example `openai` with a small model). |
+| `LLM_SMALL_PROVIDER`, `LLM_SMALL_MODEL`, `ROUTE_FIX_SCORE` | off, –, `0.8` | Cheaper model for small talk ("hi", "thanks", "dhanyavaad") and questions a Q&A answer matches closely. Small talk never triggers a search either way. |
 | `LLM_MAX_TOKENS` | `1024` (anthropic) | Longest answer in tokens. |
 | `OPENAI_STREAM_USAGE` | `true` | Ask OpenAI-compatible servers to report token usage; set `false` for a server that rejects `stream_options`. |
 | `HISTORY_MAX_CHARS` | `6000` | How much of the conversation (newest first) is sent with each question. |

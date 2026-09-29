@@ -38,6 +38,12 @@ export function getFallbackLLM(): LLMProvider | null {
   return provider ? makeLLM(provider, env("LLM_FALLBACK_MODEL")) : null;
 }
 
+/** Optional cheaper model for small talk and questions answered by the owner's Q&A (LLM_SMALL_PROVIDER / LLM_SMALL_MODEL). */
+export function getSmallLLM(): LLMProvider | null {
+  const provider = env("LLM_SMALL_PROVIDER");
+  return provider ? makeLLM(provider, env("LLM_SMALL_MODEL")) : null;
+}
+
 export function getEmbedder(): EmbeddingProvider {
   let inner: EmbeddingProvider;
   switch (envStr("EMBEDDING_PROVIDER", "mock").toLowerCase()) {

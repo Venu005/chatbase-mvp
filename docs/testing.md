@@ -19,6 +19,7 @@ pnpm build
 # terminal 1: start the app with the fake-service settings the scripts expect
 SIGNUP_RATE_LIMIT=1000 \
 LLM_FIRST_TOKEN_TIMEOUT_MS=2000 LLM_FALLBACK_PROVIDER=mock LLM_FALLBACK_MODEL=backup INGEST_RETRY_BASE_MS=1000 \
+LLM_SMALL_PROVIDER=mock LLM_SMALL_MODEL=small \
 ADMIN_EMAILS=admin@smoke.test \
 WHATSAPP_GRAPH_BASE_URL=http://127.0.0.1:4020 \
 SARVAM_API_KEY=sarvam-test-key SARVAM_STT_URL=http://127.0.0.1:4020/speech-to-text \

@@ -15,6 +15,7 @@ let passed = 0;
 const ok = (name) => console.log(`  ✓ ${name}`) || passed++;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const sid = () => crypto.randomBytes(12).toString("hex");
+const RUN = Date.now().toString(36); // fault-injected questions/texts must be new on every run (the mock remembers them)
 
 export function client() {
   let cookie = "";
@@ -65,25 +66,25 @@ try {
   const used = async () => (await a.json("/api/me")).data.usage.used;
 
   // ---- Phase 1a: timeouts, retries, backup model -----------------------------------------------------
-  const r1 = await chat(agentId, sid(), "What is the refund policy? [[mock:fail-429x2]]");
+  const r1 = await chat(agentId, sid(), `What is the refund policy? [[mock:fail-429x2]] ${RUN}`);
   assert.ok(r1.done && r1.text.includes("7 days"), JSON.stringify(r1));
-  assert.ok(!r1.text.includes("fallback"), "answered by the main model after retrying");
+  assert.ok(!r1.text.includes("(mock backup)"), "answered by the main model after retrying");
   ok("rate-limited model calls are retried with backoff and then answered");
 
   const before = await used();
   const r2 = await chat(agentId, sid(), "What is the refund policy? [[mock:fail-500]]");
-  assert.ok(r2.done && r2.text.includes("(mock fallback: backup)"), JSON.stringify(r2));
+  assert.ok(r2.done && r2.text.includes("(mock backup)"), JSON.stringify(r2));
   assert.equal(await used(), before + 1);
   ok("when the main model keeps failing, the backup model answers");
 
   const r3 = await chat(agentId, sid(), "What is the refund policy? [[mock:hang]]");
-  assert.ok(r3.done && r3.text.includes("(mock fallback: backup)"), JSON.stringify(r3));
+  assert.ok(r3.done && r3.text.includes("(mock backup)"), JSON.stringify(r3));
   assert.ok(r3.ms < 20_000, `a hung model must not hang the chat (${r3.ms} ms)`);
   ok(`a model that never answers times out (answered by the backup after ${(r3.ms / 1000).toFixed(1)} s)`);
 
   const b4 = await used();
   const r4 = await chat(agentId, sid(), "What is the refund policy? [[mock:break]]");
-  assert.ok(r4.error && r4.text.length > 0 && !r4.text.includes("fallback"), JSON.stringify(r4));
+  assert.ok(r4.error && r4.text.length > 0 && !r4.text.includes("(mock backup)"), JSON.stringify(r4));
   assert.equal(await used(), b4 + 1, "a partial answer was shown, so the credit is used");
   ok("a failure after text reached the visitor is not retried (no repeated or mixed answers)");
 
@@ -100,7 +101,7 @@ try {
   };
   const addText = async (title, text) => (await a.json(`/api/agents/${agentId}/sources`, { method: "POST", body: { type: "text", title, text } })).data.source.id;
 
-  const flaky = await addText("Flaky", "Shipping takes 4 days to metro cities. [[mock:embed-fail-6]] We ship everywhere.");
+  const flaky = await addText("Flaky", `Shipping takes 4 days to metro cities. [[mock:embed-fail-6]] We ship everywhere. ${RUN}`);
   const f = await waitFor(flaky, (s) => s.status !== "processing");
   assert.equal(f.status, "ready", JSON.stringify(f));
   assert.ok(f.seen.some((e) => /Retrying \(attempt 1 of 3 failed\)/.test(e)), JSON.stringify(f.seen));
@@ -159,6 +160,17 @@ try {
   const c3 = await chat(agentId, sid(), cq);
   assert.ok(c3.text.includes("14 days now"), "a Q&A change invalidates the cache: " + c3.text);
   ok("follow-ups skip the cache, and changing the agent's knowledge (a new Q&A answer) invalidates it at once");
+
+  // ---- Phase 4: routing to a small model ----------------------------------------------------------------
+  const an0 = (await a.json(`/api/agents/${agentId}/analytics?days=7`)).data.totals.gaps;
+  const thanks = await chat(agentId, sid(), "Thanks a lot!");
+  assert.ok(thanks.done && thanks.text.startsWith("(mock small)"), thanks.text);
+  assert.equal((await a.json(`/api/agents/${agentId}/analytics?days=7`)).data.totals.gaps, an0, "small talk is not a knowledge gap");
+  const normal = (await chat(agentId, sid(), "Do you ship to metro cities quickly?")).text; // no close Q&A match: main model
+  assert.ok(normal.startsWith("(mock model)"), normal);
+  const exact = await chat(agentId, FU, cq); // a follow-up turn (no cache) that exactly matches a Q&A answer
+  assert.ok(exact.text.startsWith("(mock small)") && exact.text.includes("14 days now"), exact.text);
+  ok("small talk skips search and isn't a knowledge gap; small talk and close Q&A matches are answered by the small model");
 
   // ---- Admin view ---------------------------------------------------------------------------------------
   assert.equal((await a.json("/api/admin/overview")).status, 404, "non-admins don't see the admin API");

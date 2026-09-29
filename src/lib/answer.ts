@@ -1,6 +1,7 @@
 import { q, q1 } from "./db";
 import { HttpError } from "./http";
-import { getFallbackLLM, getLLM } from "./providers";
+import { getFallbackLLM, getLLM, getSmallLLM } from "./providers";
+import { isSmallTalk, route, type Route } from "./routing";
 import { newRun, resilientStream, type Run } from "./providers/resilient";
 import { trimHistory } from "./providers/turns";
 import { recordAnswer } from "./ai-log";
@@ -67,6 +68,8 @@ export type Prepared = {
   cache: { key: string; knowledgeVersion: string; model: string } | null;
   /** Set when the answer comes from the cache: no search and no model call were needed. */
   cached: { answer: string } | null;
+  /** "small" = small talk or a close Q&A match, answered by LLM_SMALL_MODEL when one is configured. */
+  route: Route;
   started: number;
 };
 
@@ -118,9 +121,12 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
     // Answer cache: a visitor's first question, asked word for word before, gets the stored answer if nothing that
     // shapes answers (sources, Q&A, instructions, prompt, model) has changed since. The owner's playground always
     // gets a fresh answer.
-    const primary = getLLM();
+    // The model part of the key covers the main and the small model, so changing either invalidates cached answers.
+    const main = getLLM();
+    const small = getSmallLLM();
+    const models = `${main.name}:${main.model}${small ? `|${small.name}:${small.model}` : ""}`;
     const key = channel !== "playground" && answerCacheEnabled() && !prior.some((m) => m.role === "user") ? questionKey(message) : null;
-    const cache = key ? { key, knowledgeVersion: agent.knowledge_version, model: `${primary.name}:${primary.model}` } : null;
+    const cache = key ? { key, knowledgeVersion: agent.knowledge_version, model: models } : null;
     if (cache) {
       const hit = await q1<{ answer: string; citations: Citation[]; knowledge_gap: boolean }>(
         `UPDATE answer_cache SET hits = hits + 1
@@ -149,6 +155,7 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
           knowledgeGap: hit.knowledge_gap,
           cache,
           cached: { answer: hit.answer },
+          route: "main",
           started,
         };
       }
@@ -160,7 +167,9 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
     // QUERY_REWRITE=on, otherwise the previous question is simply searched together with the new message.
     const rewrite = lastUser && queryRewriteEnabled() ? await rewriteFollowUp(prior, message) : null;
     const searchQuery = rewrite?.query ?? (lastUser ? `${lastUser}\n${message}` : message);
-    const { chunks, fixes } = await retrieveKnowledge(agent.id, searchQuery, message);
+    // Small talk ("thanks!", "hi") needs no search, and isn't a gap in the agent's knowledge.
+    const smallTalk = isSmallTalk(message);
+    const { chunks, fixes } = smallTalk ? { chunks: [], fixes: [] } : await retrieveKnowledge(agent.id, searchQuery, message);
 
     await q("INSERT INTO messages (conversation_id, role, content) VALUES ($1,'user',$2)", [conversationId, message]);
     return {
@@ -178,9 +187,10 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
       history,
       citations: toCitations(chunks),
       fixMatched: fixes.length > 0,
-      knowledgeGap: !chunks.length && !fixes.length,
+      knowledgeGap: !smallTalk && !chunks.length && !fixes.length,
       cache,
       cached: null,
+      route: route(message, fixes.length ? Math.max(...fixes.map((f) => f.score)) : null, envNum("ROUTE_FIX_SCORE", 0.8)),
       started,
     };
   } catch (e) {
@@ -195,7 +205,8 @@ export const answerCacheEnabled = () => env("ANSWER_CACHE")?.toLowerCase() !== "
 /** Streams the bot's reply through the production wrapper (timeouts, retries, backup model), or from the cache. */
 export function streamAnswer(p: Prepared, run: Run, signal?: AbortSignal): AsyncGenerator<string> {
   if (p.cached) return streamCached(p, run);
-  return resilientStream({ system: p.system, messages: p.history, signal }, getLLM(), getFallbackLLM(), run);
+  const primary = (p.route === "small" && getSmallLLM()) || getLLM();
+  return resilientStream({ system: p.system, messages: p.history, signal }, primary, getFallbackLLM(), run);
 }
 
 async function* streamCached(p: Prepared, run: Run): AsyncGenerator<string> {

@@ -15,6 +15,7 @@ import { containsAny, isRefusal, normalize, percentile, rankOf, regressions, scr
 import { dropNearDuplicates, fuse, keywordCoverage, keywordQuery, keywordTerms } from "../src/lib/keywords.ts";
 import { rerank } from "../src/lib/rerank.ts";
 import { questionKey } from "../src/lib/cache-key.ts";
+import { isSmallTalk, route } from "../src/lib/routing.ts";
 import http from "node:http";
 import { parseInline, parseMarkdown } from "../src/lib/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/lib/domains.ts";
@@ -413,4 +414,13 @@ test("questionKey: same question in any casing/punctuation, but words, numbers a
   assert.notEqual(questionKey("delivery kab hogi"), questionKey("डिलीवरी कब होगी"));
   assert.equal(questionKey("???"), null);
   assert.equal(questionKey("x".repeat(201)), null, "long questions aren't cached");
+});
+
+test("routing: small talk (English, Hinglish, Hindi) and close Q&A matches go to the small model", () => {
+  for (const t of ["hi", "Hello!", "thanks a lot 🙏", "Thank you so much", "ok", "okk", "dhanyavaad ji", "shukriya", "धन्यवाद", "bye", "good morning sir"]) assert.ok(isSmallTalk(t), t);
+  for (const t of ["hi, what are your timings?", "thanks, and the 10 kg one?", "hello? anyone there?", "ok so do you deliver to Domlur", "is the shop open"]) assert.ok(!isSmallTalk(t), t);
+  assert.equal(route("thanks!", null), "small");
+  assert.equal(route("Do you deliver on Sunday?", 0.93), "small");
+  assert.equal(route("Do you deliver on Sunday?", 0.6), "main");
+  assert.equal(route("What is the refund policy?", null), "main");
 });
