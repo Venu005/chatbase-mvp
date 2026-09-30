@@ -4,6 +4,12 @@ Train an AI support agent on a business's website, PDFs and FAQs, then add it to
 connect it to WhatsApp. A working first version of a Chatbase-style product for Indian small businesses: Hindi, Hinglish
 and regional-language questions, WhatsApp, INR subscriptions, and a human-handoff inbox.
 
+## Product guide
+
+**[Read the product guide](docs/guide/index.html)**: every feature, how business owners use it (with screenshots), the
+admin app, voice agents, the go-live checklist and test results. Open `docs/guide/index.html` in a browser, or view the
+hosted copy at <https://claude.ai/artifact/KQNYdyoLPstmy9GaFd7joF> (private: ask the repository owner for access).
+
 ## What works today
 
 - Sign up / log in (e-mail + password), password reset by e-mail (signs out other sessions), per-account data isolation
@@ -26,6 +32,12 @@ and regional-language questions, WhatsApp, INR subscriptions, and a human-handof
   goes quiet, the owner is e-mailed and replies from the dashboard inbox (also to WhatsApp customers), then hands back
 - **Razorpay billing**: Starter / Growth / Pro monthly INR subscriptions; the plan changes only on Razorpay's signed webhook
 - Monthly message-credit limits per plan (placeholder prices in `packages/core/src/plans.ts`), per-IP rate limiting
+- **Structure-aware reading**: passages follow headings, tables and spreadsheet rows (with column names) and PDF pages;
+  answers cite the section and page; websites are refreshed weekly (or with **Refresh now**), re-embedding only changes
+- **Voice agents**: customers talk to the assistant on the website (microphone button) or by phone (Plivo, Exotel), with
+  interruptions, handoff and call transfer ([docs/voice.md](docs/voice.md))
+- **Admin app**: revenue and profit per account, growth and churn risk, languages and topics, agent health, operations and
+  e-mail alerts, plan/credit actions and an audit log ([docs/admin.md](docs/admin.md))
 
 ## Quick start
 
