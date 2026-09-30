@@ -251,3 +251,13 @@ label.check input { width: auto; }
   .funnel-row { grid-template-columns: 1fr 60px; }
   .funnel-row .hbar, .funnel-row .small { grid-column: 1 / -1; }
 }
+
+/* ---- Voice mode (chat widget) ------------------------------------------- */
+.chat-input .mic-btn { background: none; color: var(--text); border: 1px solid var(--border); padding: 0 10px; display: inline-flex; align-items: center; }
+.voice-bar { display: flex; align-items: center; gap: 10px; padding: 12px; border-top: 1px solid var(--border); }
+.voice-bar span:nth-child(2) { flex: 1; }
+.voice-dot { width: 14px; height: 14px; border-radius: 50%; flex: none; opacity: .5; }
+.voice-dot.listening { opacity: 1; animation: voice-pulse 1.4s ease-in-out infinite; }
+.voice-dot.speaking { opacity: 1; animation: voice-pulse .6s ease-in-out infinite; }
+@keyframes voice-pulse { 50% { transform: scale(1.35); } }
+@media (prefers-reduced-motion: reduce) { .voice-dot.listening, .voice-dot.speaking { animation: none; } }

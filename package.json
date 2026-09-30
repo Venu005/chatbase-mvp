@@ -29,6 +29,7 @@
     "smoke:billing": "pnpm --filter @chatbase/web smoke:billing",
     "smoke:admin": "pnpm --filter @chatbase/admin smoke",
     "smoke:insights": "pnpm --filter @chatbase/admin smoke:insights",
+    "smoke:voice": "pnpm --filter @chatbase/voice smoke",
     "eval": "pnpm --filter @chatbase/web eval",
     "razorpay:setup": "pnpm --filter @chatbase/web razorpay:setup"
   },

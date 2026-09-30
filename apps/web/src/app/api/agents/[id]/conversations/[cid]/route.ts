@@ -17,7 +17,9 @@ export const GET = handle<Ctx>(async (_req, { params }) => {
   if (!/^[0-9a-f-]{36}$/i.test(cid)) throw new HttpError(404, "Conversation not found");
   const conversation = await q1(
     `SELECT id, channel, mode, needs_reply, handoff_reason,
-            CASE WHEN channel = 'whatsapp' THEN '+' || substr(session_id, 4) ELSE visitor_contact END AS contact
+            CASE WHEN channel = 'whatsapp' THEN '+' || substr(session_id, 4)
+                 WHEN channel = 'phone' AND split_part(session_id, '_', 2) <> '000000' THEN '+' || split_part(session_id, '_', 2)
+                 ELSE visitor_contact END AS contact
        FROM conversations WHERE id = $1 AND agent_id = $2`,
     [cid, agent.id]
   );

@@ -577,3 +577,59 @@ test("agentHealth and churnRisk", async () => {
   assert.match(drop.reasons[0], /usage down 70%/);
   assert.equal(churnRisk({ ...base, daysSinceLastAnswer: null, answersLast14: 0, answersPrev14: 0 }).reasons[0], "never had a real conversation");
 });
+
+test("voice audio: μ-law round trip, resampling, WAV, loudness", async () => {
+  const { ulawDecode, ulawEncode, resample, toWav, fromWav, rms, tone, pcmFromBytes, pcmToBytes } = await import("../src/voice/audio.ts");
+  const t = tone(100, 8000, 440, 8000);
+  const back = ulawDecode(ulawEncode(t));
+  assert.ok(t.every((v, i) => Math.abs(v - back[i]) <= Math.max(16, Math.abs(v) * 0.04)), "μ-law keeps the waveform");
+  assert.equal(resample(t, 8000, 16000).length, 1600);
+  assert.equal(resample(t, 16000, 8000).length, 400);
+  const w = fromWav(toWav(t, 8000));
+  assert.equal(w.rate, 8000);
+  assert.deepEqual([...w.pcm], [...t]);
+  assert.deepEqual([...pcmFromBytes(pcmToBytes(t))], [...t]);
+  assert.ok(Math.abs(rms(t) - 8000 / Math.SQRT2) < 100);
+  assert.equal(rms(new Int16Array(160)), 0);
+});
+
+test("voice activity detection: speech start and end, noise ignored, preroll kept", async () => {
+  const { Vad } = await import("../src/voice/vad.ts");
+  const { tone } = await import("../src/voice/audio.ts");
+  const vad = new Vad({ rate: 16000, silenceMs: 300, minSpeechMs: 100 });
+  const frames = (pcm) => Array.from({ length: Math.ceil(pcm.length / 320) }, (_, i) => pcm.subarray(i * 320, (i + 1) * 320));
+  const events = [];
+  for (const f of frames(tone(500, 16000, 200, 150))) events.push(...vad.push(f)); // quiet hum: background noise
+  assert.deepEqual(events, []);
+  for (const f of frames(tone(600, 16000, 300, 6000))) events.push(...vad.push(f));
+  assert.deepEqual(events.map((e) => e.type), ["start"]);
+  assert.ok(vad.inSpeech);
+  for (const f of frames(new Int16Array(16000 * 0.4))) events.push(...vad.push(f));
+  const end = events.find((e) => e.type === "end");
+  assert.ok(end && end.ms >= 600 && end.ms < 1500, JSON.stringify(end && end.ms));
+  assert.ok(!vad.inSpeech);
+});
+
+test("speech text: sentences released as they complete; markdown, citations and links removed", async () => {
+  const { SentenceSplitter, cleanForSpeech } = await import("../src/voice/speech-text.ts");
+  const s = new SentenceSplitter();
+  const out = [];
+  for (const d of ["Basmati rice costs ", "Rs. 610 for 5 kg [1]. ", "We deliver ", "in 2.5 days. Anything", " else?"]) out.push(...s.push(d));
+  out.push(...s.flush());
+  assert.deepEqual(out, ["Basmati rice costs Rs. 610 for 5 kg.", "We deliver in 2.5 days.", "Anything else?"]);
+  assert.equal(cleanForSpeech("**Timings:**\n- Mon–Sat 9am–9pm [2]\n- See https://shop.in/hours"), "Timings:\nMon–Sat 9am–9pm\nSee our website");
+});
+
+test("voice tickets: signed, bound to the agent and session, and expire", async () => {
+  process.env.AUTH_SECRET ??= "x".repeat(40);
+  const { voiceTicket, checkVoiceTicket } = await import("../src/voice/ticket.ts");
+  const t = voiceTicket("agent-1", "sess-12345678");
+  assert.deepEqual(checkVoiceTicket(t), { agentId: "agent-1", sessionId: "sess-12345678" });
+  assert.equal(checkVoiceTicket(t.slice(0, -2) + "xx"), null);
+  assert.equal(checkVoiceTicket(voiceTicket("a", "s", -1)), null);
+});
+
+test("phoneFromSession: phone-call sessions map to the caller's number", () => {
+  assert.equal(phoneFromSession("ph_919876543210_CA123"), "+919876543210");
+  assert.equal(phoneFromSession("ph_919876543210"), null);
+});

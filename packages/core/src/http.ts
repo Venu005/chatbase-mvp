@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ZodError } from "zod";
 
-export class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string
-  ) {
-    super(message);
-  }
-}
+import { HttpError } from "./errors";
+
+export { HttpError };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Handler<C> = (req: NextRequest, ctx: C) => Promise<Response>;

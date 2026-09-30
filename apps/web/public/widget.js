@@ -29,6 +29,7 @@
     frame.setAttribute("loading", "lazy");
     // The chat page checks which website embeds it (an agent can be limited to its owner's websites).
     frame.referrerPolicy = "origin";
+    frame.allow = "microphone"; // voice mode (talking to the assistant), when the agent has it turned on
     frame.style.cssText = "width:100%;height:100%;border:0;";
     frameBox.appendChild(frame);
 

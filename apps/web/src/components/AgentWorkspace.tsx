@@ -8,6 +8,7 @@ import FixForm from "./FixForm";
 import Markdown from "./Markdown";
 import Analytics from "./Analytics";
 import Leads from "./Leads";
+import VoiceSettings from "./VoiceSettings";
 
 type Agent = {
   id: string;
@@ -40,7 +41,7 @@ type Convo = {
 type Message = { id: number; role: string; content: string; created_at: string; feedback: 1 | -1 | null; bot: boolean; fixed: boolean };
 type Fix = { id: string; question: string; answer: string; message_id: string | null; updated_at: string };
 
-const TABS = ["Sources", "Q&A", "Playground", "Settings", "Embed", "WhatsApp", "Chats", "Leads", "Analytics"] as const;
+const TABS = ["Sources", "Q&A", "Playground", "Settings", "Embed", "WhatsApp", "Voice", "Chats", "Leads", "Analytics"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function AgentWorkspace({ id }: { id: string }) {
@@ -117,6 +118,7 @@ export default function AgentWorkspace({ id }: { id: string }) {
       )}
       {tab === "Embed" && <EmbedTab agent={agent} onSaved={load} />}
       {tab === "WhatsApp" && <WhatsAppTab agentId={id} />}
+      {tab === "Voice" && <VoiceSettings agentId={id} />}
       {tab === "Analytics" && <Analytics agentId={id} />}
       {tab === "Leads" && (
         <Leads
@@ -764,14 +766,18 @@ function ChatsTab({ agentId, convos, refresh, handoffEnabled }: { agentId: strin
                   </div>
                 ))}
               </div>
-              <form className="reply-form" onSubmit={send}>
+              {c.channel === "phone" ? (
+                <p className="muted reply-form">
+                  This was a phone call{c.contact ? <>: call the customer back on <a href={`tel:${c.contact}`}>{c.contact}</a></> : ""}.
+                </p>
+              ) : <form className="reply-form" onSubmit={send}>
                 <textarea rows={3} value={reply} onChange={(e) => setReply(e.target.value)} maxLength={4000} placeholder={c.channel === "whatsapp" ? "Reply on WhatsApp…" : "Reply in the website chat…"} />
                 {error && <p className="error-text">{error}</p>}
                 <div className="row-form">
                   <button className="btn" disabled={busy || !reply.trim()}>{busy ? "Sending…" : "Send reply"}</button>
                   <span className="muted small">Replying pauses the assistant in this chat until you hand it back.</span>
                 </div>
-              </form>
+              </form>}
             </>
           )}
         </div>

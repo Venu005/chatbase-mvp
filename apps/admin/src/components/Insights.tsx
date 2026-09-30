@@ -305,7 +305,7 @@ type Quality = {
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const CHANNELS: Record<string, string> = { widget: "Website widget", whatsapp: "WhatsApp", embed: "Embedded page" };
+const CHANNELS: Record<string, string> = { widget: "Website widget", whatsapp: "WhatsApp", embed: "Embedded page", voice: "Website voice", phone: "Phone calls" };
 
 export function QualityTab({ days }: { days: number }) {
   const { data: d, error } = useData<Quality>(`/api/admin/quality?days=${days}`);

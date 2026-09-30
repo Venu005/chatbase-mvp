@@ -70,6 +70,9 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `SARVAM_REASONING_EFFORT` | service default | `none` (recommended for support answers), `low`, `medium` or `high`. |
 | `SARVAM_MAX_TOKENS` | `1024` | Maximum length of one answer. |
 | `VOICE_NOTES` | on when `SARVAM_API_KEY` is set | `off` stops transcribing WhatsApp voice notes. |
+| `VOICE_PUBLIC_URL`, `VOICE_PORT` | off, `3002` | Voice agents (website microphone, phone calls) through the voice gateway: its public address and port. More settings in [voice.md](voice.md). |
+| `TTS_PROVIDER`, `SARVAM_TTS_MODEL` | `sarvam` with a key (else `mock`), `bulbul:v2` | Text-to-speech for voice agents. |
+| `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN` | none | Transfer Plivo calls to the owner. |
 | `SARVAM_STT_MODEL`, `SARVAM_STT_URL`, `SARVAM_STT_LANGUAGE` | `saaras:v3`, `https://api.sarvam.ai/speech-to-text`, `unknown` (auto-detect) | Speech-to-text for voice notes. Set the language (e.g. `hi-IN`) only if all your customers speak one language. |
 | `EMBEDDING_PROVIDER` | `mock` | `mock` (development only) or `openai` (any OpenAI-compatible embeddings endpoint). |
 | `EMBEDDING_API_KEY` | `OPENAI_API_KEY` | Key for the embeddings endpoint. |
@@ -145,20 +148,21 @@ connection. Manual connections need no variables.
 | `ALLOW_PRIVATE_URLS` | `false` | Lets URL sources fetch localhost and private addresses. **Never `true` on a public server.** |
 | `SIGNUP_RATE_LIMIT` | `10` | Sign-ups per IP per hour. |
 
-Two more variables exist only for the test scripts (they redirect calls to local fake servers): `WHATSAPP_GRAPH_BASE_URL`
-and `RAZORPAY_API_BASE`. Never set them in production.
+A few more variables exist only for the test scripts (they redirect calls to local fake servers): `WHATSAPP_GRAPH_BASE_URL`,
+`RAZORPAY_API_BASE` and `PLIVO_API_BASE`. Never set them in production.
 
 ## 5. Commands
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` / `pnpm build` / `pnpm start` | Development servers / production build / production servers, for both apps (ports 3000 and 3001). `pnpm dev:web` or `pnpm dev:admin` runs one. |
+| `pnpm dev` / `pnpm build` / `pnpm start` | Development servers / production build / production servers: customer app (3000), admin app (3001), voice gateway (3002). `pnpm dev:web` or `pnpm dev:admin` runs one. |
 | `pnpm migrate` | Applies database migrations (safe to re-run) |
 | `pnpm preflight [--live] [--email you@x.com]` | Checks `.env` and the database; `--live` also tests the external services |
 | `pnpm razorpay:setup` | Creates the monthly INR plans in Razorpay and prints the `RAZORPAY_PLAN_*` lines |
 | `pnpm typecheck` | TypeScript check |
 | `pnpm test` | Unit tests (chunking, encryption, message formatting, handoff phrases, provider helpers) |
-| `pnpm smoke:admin` | Admin sign-in, adding and removing admins, password changes (needs both apps running) |
+| `pnpm smoke:admin`, `smoke:insights` | Admin sign-in and admins; admin insights, actions and alerts (need the apps running) |
+| `pnpm smoke:voice` | Voice agents: website voice, Plivo and Exotel calls, barge-in, transfers (needs the voice gateway running) |
 | `pnpm smoke`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | End-to-end tests against fake external services. See [testing.md](testing.md). |
 
 ## 6. Upgrading

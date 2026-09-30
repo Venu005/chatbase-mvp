@@ -1,0 +1,23 @@
+{
+  "name": "@chatbase/voice",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Voice gateway: website voice mode and phone calls (Plivo, Exotel) for the agents, over WebSockets.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node --env-file-if-exists=../../.env scripts/smoke-voice.mjs"
+  },
+  "dependencies": {
+    "@chatbase/core": "workspace:*",
+    "tsx": "^4.23.15",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.3"
+  }
+}

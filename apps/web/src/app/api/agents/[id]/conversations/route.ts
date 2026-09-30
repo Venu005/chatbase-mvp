@@ -14,7 +14,9 @@ export const GET = handle<Ctx>(async (_req, { params }) => {
   const agent = await ownAgent(user.id, (await params).id);
   const conversations = await q(
     `SELECT c.id, c.channel, c.created_at, c.updated_at, c.mode, c.needs_reply, c.handoff_reason,
-            CASE WHEN c.channel = 'whatsapp' THEN '+' || substr(c.session_id, 4) ELSE c.visitor_contact END AS contact,
+            CASE WHEN c.channel = 'whatsapp' THEN '+' || substr(c.session_id, 4)
+                 WHEN c.channel = 'phone' AND split_part(c.session_id, '_', 2) <> '000000' THEN '+' || split_part(c.session_id, '_', 2)
+                 ELSE c.visitor_contact END AS contact,
             (SELECT count(*)::int FROM messages m WHERE m.conversation_id = c.id) AS message_count,
             (SELECT count(*)::int FROM messages m WHERE m.conversation_id = c.id AND m.feedback = -1) AS thumbs_down,
             (SELECT m.content FROM messages m WHERE m.conversation_id = c.id AND m.role = 'user' ORDER BY m.id DESC LIMIT 1) AS last_visitor_message,

@@ -15,6 +15,12 @@ export type Agent = {
   lead_mode: "off" | "after_first_answer" | "before_chat";
   lead_fields: ("name" | "email" | "phone")[];
   lead_message: string;
+  voice_enabled: boolean;
+  voice_language: string;
+  voice_speaker: string;
+  voice_greeting: string;
+  voice_transfer_number: string | null;
+  voice_token: string;
   created_at: string;
 };
 
