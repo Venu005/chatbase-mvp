@@ -6,6 +6,7 @@ import { SINCE, TZ, periodQuery, usdInrRate } from "@/lib/admin";
 import { planOf } from "@chatbase/core/plans";
 import { embeddingModelId, getFallbackLLM, getLLM } from "@chatbase/core/providers";
 import { env } from "@chatbase/core/env";
+import { currentAlerts } from "@chatbase/core/ops-alerts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export const GET = handle(async (req) => {
   const args = [String(days), TZ];
   const month = new Date().toISOString().slice(0, 7);
 
-  const [totals, daily, models, accounts, problems, ingestion, failedSources, embedding] = await Promise.all([
+  const [totals, daily, models, accounts, problems, ingestion, failedSources, embedding, alerts] = await Promise.all([
     q1(
       `SELECT
          (SELECT count(*)::int FROM users) AS accounts,
@@ -108,6 +109,7 @@ export const GET = handle(async (req) => {
          FROM chunks`,
       [embeddingModelId()]
     ),
+    currentAlerts(),
   ]);
 
   // Zero-filled daily series, oldest first.
@@ -138,5 +140,6 @@ export const GET = handle(async (req) => {
     problems,
     ingestion: { ...ingestion, failedSources },
     embedding,
+    alerts,
   });
 });

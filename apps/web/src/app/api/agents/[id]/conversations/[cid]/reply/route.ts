@@ -29,6 +29,7 @@ export const POST = handle<Ctx>(async (req, { params }) => {
 
   const convo = await q1<{ id: string; channel: string; session_id: string }>("SELECT id, channel, session_id FROM conversations WHERE id = $1 AND agent_id = $2", [cid, agent.id]);
   if (!convo) throw new HttpError(404, "Conversation not found");
+  if (convo.channel === "phone") throw new HttpError(409, "This was a phone call: please call the customer back.");
 
   if (convo.channel === "whatsapp") {
     const to = phoneFromSession(convo.session_id)?.slice(1);

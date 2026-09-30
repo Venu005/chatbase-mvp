@@ -31,13 +31,19 @@ SMTP_URL=smtp://127.0.0.1:4025 EMAIL_FROM="Bot <bot@example.com>" \
 RAZORPAY_API_BASE=http://127.0.0.1:4030 RAZORPAY_KEY_ID=rzp_test_fake RAZORPAY_KEY_SECRET=fake_key_secret \
 RAZORPAY_WEBHOOK_SECRET=whsec_test RAZORPAY_PLAN_STARTER=plan_starter0000001 RAZORPAY_PLAN_GROWTH=plan_growth00000001 \
 META_APP_ID=app_123456 META_APP_SECRET=platform-app-secret-for-tests META_ES_CONFIG_ID=cfg_987654 \
-WHATSAPP_WEBHOOK_VERIFY_TOKEN=platform-verify-token \
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=platform-verify-token ALERTS=off \
+SARVAM_TTS_URL=http://127.0.0.1:4020/text-to-speech VOICE_PUBLIC_URL=http://127.0.0.1:3002 \
+PLIVO_AUTH_ID=MA_TEST PLIVO_AUTH_TOKEN=plivo-test-token PLIVO_API_BASE=http://127.0.0.1:4031 \
 pnpm start
 
 # terminal 2
 pnpm smoke             # accounts, ingestion, RAG answers, isolation, limits, widget, rate limits
-pnpm smoke:ai          # AI pipeline: retries, timeouts, backup model, usage and cost records, admin view
+pnpm smoke:ai          # AI pipeline: retries, timeouts, backup model, structured chunking (sites, CSV, PDF pages),
+                       # website refresh, usage and cost records, admin view
 pnpm smoke:admin       # admin app: sign-in, adding and removing admins, password changes, separate sessions
+pnpm smoke:voice       # voice agents: website voice, Plivo and Exotel calls, barge-in, handoff and transfer, latency
+pnpm smoke:insights    # admin insights: MRR/profit, funnel/cohorts/churn risk, languages/topics/health, alerts,
+                       # comped plans, bonus credits, read-only conversations, audit log
 pnpm smoke:features    # 👍/👎 feedback, Q&A answers, analytics, lead capture and CSV
 pnpm smoke:account     # password reset e-mails and links, allowed websites for the widget
 pnpm smoke:whatsapp    # manual WhatsApp connection, webhook signatures, dedupe, replies, credits
@@ -62,6 +68,7 @@ pnpm eval -- --save-baseline         # remember these scores for this dataset + 
 pnpm eval -- --check                 # exit 1 if any rate is >5 points below the baseline (use in CI)
 pnpm eval -- --judge                 # also grade groundedness with EVAL_JUDGE_PROVIDER / EVAL_JUDGE_MODEL
 pnpm eval -- --only sku,hinglish     # only some categories (or question ids)
+pnpm eval -- --dataset eval/datasets/store-docs.json   # structured documents: sections, a price CSV, an FAQ, a table
 ```
 
 | Score | Meaning |
@@ -71,6 +78,8 @@ pnpm eval -- --only sku,hinglish     # only some categories (or question ids)
 | refuse | For questions the sources don't cover, the assistant says it doesn't know instead of inventing |
 | lang | The reply uses the customer's script (Devanagari for Hindi, Latin for English and Hinglish) |
 | grounded | (`--judge`) A grader model found no claims the passages don't support |
+| context | The whole fact the answer needs (for example a full policy section) reached the model |
+| precise | The top passage holds only the right section or row, not its neighbours (for example not the next product's price) |
 
 Results are printed by category (direct, paraphrase, product code, product, follow-up, Hinglish, Hindi, out of scope) and
 saved to `eval/results/`. Baselines live in `eval/baselines/`, one per dataset and model combination. **Only numbers from real
@@ -92,6 +101,21 @@ so you can compare setups side by side:
 
 For Hindi and Hinglish customers, look at the `hindi` and `hinglish` rows specifically: English-only embedding models
 often do well overall and poorly there.
+
+### Store documents dataset, mock models
+
+`eval/datasets/store-docs.json` has a return policy with per-category sections, a 30-row price spreadsheet, an FAQ and a
+warranty table. Old fixed-size chunks against the structure-aware chunker (`CHUNKER=flat` vs the default):
+
+| Chunker | hit@k | top-1 | context | precise | answer* | tokens/answer |
+| --- | --- | --- | --- | --- | --- | --- |
+| Flat, 900 characters | 100% | 83% | 44% | 0% | 44% | 588 |
+| Structured (current) | 100% | 78% | 100% | 100% | 39% | 676 |
+
+With flat chunks a price row sat in a passage with a dozen other rows and policy sections were cut mid-way, so the model
+often didn't see the whole rule (context 44%) or saw the wrong product's price next to the right one (precise 0%). The
+small top-1 dip is in the `sections` category, where the mock embeddings match only shared words (sofa → Furniture);
+real embedding models don't have that problem.
 
 ### Kirana dataset, mock models
 

@@ -18,8 +18,9 @@ async function ownSourceId(userId: string, params: Ctx["params"]) {
 }
 
 /**
- * Retry a failed source. Websites are read again with their original page count; files and pasted text are
- * processed again from the content kept when they were added (sources added before that was kept must be re-added).
+ * Retry a failed source, or refresh a website now (read it again). Websites are read with their original page count;
+ * files and pasted text are processed again from the content kept when they were added (sources added before that was
+ * kept must be re-added). Unchanged passages keep their vectors, so a refresh only pays for what changed.
  */
 export const POST = handle<Ctx>(async (_req, { params }) => {
   const user = await requireUser();
@@ -29,7 +30,8 @@ export const POST = handle<Ctx>(async (_req, { params }) => {
     agent.id,
   ]);
   if (!src) throw new HttpError(404, "Source not found");
-  if (src.status !== "failed") throw new HttpError(409, "Only a failed source can be retried");
+  const refresh = src.status === "ready" && src.type === "url";
+  if (src.status !== "failed" && !refresh) throw new HttpError(409, "Only a failed source (or a website) can be read again");
   if (!(await canReprocess(src))) throw new HttpError(400, "This source's original content wasn't kept. Remove it and add it again.");
   if (src.type === "url") {
     try {
@@ -38,7 +40,7 @@ export const POST = handle<Ctx>(async (_req, { params }) => {
       throw new HttpError(400, (e as Error).message);
     }
   }
-  if (!(await requeueSource(src.id))) throw new HttpError(409, "Only a failed source can be retried");
+  if (!(await requeueSource(src.id))) throw new HttpError(409, "This source is already being processed");
   return NextResponse.json({ source: { id: src.id, status: "processing" } }, { status: 202 });
 });
 

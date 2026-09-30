@@ -20,6 +20,8 @@ import { looksClientRendered, looksScanned } from "../src/content-checks.ts";
 import http from "node:http";
 import { parseInline, parseMarkdown } from "../src/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/domains.ts";
+import { chunkBlocks, csvToBlocks, groupContext, pagesToBlocks, parseCsv, rowText, textToBlocks, tokens } from "../src/structure.ts";
+import { htmlToBlocks } from "../src/html-blocks.ts";
 import { csvCell, normalizeEmail, normalizePhone, parseContact, toCsv } from "../src/leads.ts";
 
 process.env.AUTH_SECRET ??= "unit-test-secret-unit-test-secret-1234";
@@ -436,4 +438,198 @@ test("content checks: scanned PDFs and JavaScript app shells are recognised", ()
   assert.ok(looksClientRendered("<noscript>Please enable JavaScript</noscript><script></script>", 40));
   assert.ok(!looksClientRendered("<main>" + "Real text. ".repeat(40) + "</main><script></script>", 440), "plenty of text: fine as is");
   assert.ok(!looksClientRendered("<p>Short page</p>", 10), "no scripts: not an app shell");
+});
+
+// ---- structure-aware chunking -------------------------------------------------------------------------------
+test("tokens: Indic scripts cost more tokens per character than Latin", () => {
+  assert.equal(tokens("abcdefgh"), 2);
+  assert.equal(tokens("डिलीवरी"), 4);
+  assert.ok(tokens("हम दो घंटे में डिलीवरी करते हैं") > tokens("We deliver in two hours time"));
+});
+
+test("textToBlocks: Markdown headings, FAQ labels, lists and pipe tables", () => {
+  const b = textToBlocks("# Policies\n\nReturns:\nUnopened items within 7 days.\n\n- UPI\n- Cards\n\n| Item | Price |\n|---|---|\n| Atta 5 kg | ₹265 |\n| Rice | ₹189 |");
+  assert.deepEqual(b.map((x) => x.kind), ["heading", "heading", "text", "list", "table"]);
+  assert.deepEqual([b[0].level, b[1].level, b[1].text], [1, 3, "Returns"]);
+  assert.deepEqual(b[3].items, ["UPI", "Cards"]);
+  assert.deepEqual(b[4].header, ["Item", "Price"]);
+  assert.deepEqual(b[4].rows[1], ["Rice", "₹189"]);
+  assert.equal(textToBlocks("Delivery charges: free above ₹300.")[0].kind, "text", "a sentence with a colon isn't a heading");
+});
+
+test("parseCsv / csvToBlocks: quotes, commas and newlines inside quotes, other separators; rows keep column names", () => {
+  assert.deepEqual(parseCsv('Name,Price\n"Atta, 5 kg",265\n"Say ""hi""",1\n'), [["Name", "Price"], ["Atta, 5 kg", "265"], ['Say "hi"', "1"]]);
+  assert.deepEqual(parseCsv("a;b\n1;2"), [["a", "b"], ["1", "2"]]);
+  const t = csvToBlocks("Product,Code,Price\nAtta 5 kg,AA-5K,265\n");
+  assert.equal(rowText(t[0].header, t[0].rows[0]), "Product: Atta 5 kg · Code: AA-5K · Price: 265");
+});
+
+test("pagesToBlocks: page numbers kept, running headers/footers dropped, broken lines joined", () => {
+  const page = (n, body) => `Sharma Kirana Menu\n${body}\nPage ${n} of 4`;
+  const b = pagesToBlocks([page(1, "Masala dosa ₹80"), page(2, "Idli ₹40\nserved with chutney"), page(3, "Vada ₹30"), page(4, "Coffee ₹25")]);
+  const texts = b.map((x) => x.text).join(" | ");
+  assert.ok(!/Sharma Kirana Menu|Page \d/.test(texts), texts);
+  assert.ok(b.some((x) => x.page === 2 && x.text === "Idli ₹40 served with chutney"), JSON.stringify(b));
+});
+
+test("pagesToBlocks + chunkBlocks: a 2-page PDF loses its header/footer and passages never span pages", () => {
+  const page = (n, body) => `Sharma Stores - Policies\n${body}\nPage ${n} of 2`;
+  const c = chunkBlocks(pagesToBlocks([page(1, "Returns within 10 days."), page(2, "Warranty is 18 months.")]));
+  assert.deepEqual(c.map((x) => [x.content, x.page]), [["Returns within 10 days.", 1], ["Warranty is 18 months.", 2]]);
+});
+
+test("chunkBlocks: sections never mix, heading paths and pages kept, rows carry column names, small-to-big context", () => {
+  const blocks = [
+    { kind: "heading", level: 1, text: "Returns" },
+    { kind: "heading", level: 2, text: "Electronics" },
+    { kind: "text", text: "Electronics can be returned within 10 days if the seal is intact." },
+    { kind: "heading", level: 2, text: "Groceries" },
+    { kind: "text", text: "Packaged groceries can be returned within 7 days.", page: 3 },
+    { kind: "heading", level: 1, text: "Prices" },
+    { kind: "table", header: ["Product", "Price"], rows: Array.from({ length: 60 }, (_, i) => [`Item ${i}`, `₹${100 + i}`]) },
+  ];
+  const c = chunkBlocks(blocks, { maxTokens: 60, contextTokens: 120 });
+  const elec = c.find((x) => x.content.includes("10 days"));
+  assert.deepEqual(elec.headingPath, ["Returns", "Electronics"]);
+  assert.ok(!elec.content.includes("7 days"), "sections are not mixed");
+  assert.equal(c.find((x) => x.content.includes("7 days")).page, 3);
+  const rows = c.filter((x) => x.headingPath[0] === "Prices");
+  assert.ok(rows.length > 3, "a big table becomes several passages");
+  assert.ok(rows.every((x) => x.content.split("\n").every((l) => /^Product: Item \d+ · Price: ₹\d+$/.test(l))), "rows are whole and keep column names");
+  assert.ok(rows.every((x) => tokens(x.content) <= 60));
+  assert.equal(elec.context, elec.content, "a small section is its own context");
+  const mid = rows[2];
+  assert.ok(mid.context.includes(mid.content) && mid.context.length > mid.content.length, "big sections give neighbours as context");
+  assert.ok(tokens(mid.context) <= 125);
+});
+
+test("htmlToBlocks: headings, lists, tables (with or without <th>), chrome skipped", () => {
+  const { title, blocks } = htmlToBlocks(`<html><head><title>Shop</title></head><body>
+    <nav>Home | About</nav><main><h1>Delivery</h1><p>We deliver in <b>2 hours</b>.</p>
+    <h2>Areas</h2><ul><li>Indiranagar</li><li>Domlur</li></ul>
+    <table><tr><td>Item</td><td>Price</td></tr><tr><td>Atta</td><td>₹265</td></tr></table>
+    <div>Call us<br>+91 98450 12345</div></main><footer>© 2026</footer></body></html>`);
+  assert.equal(title, "Shop");
+  assert.deepEqual(blocks.map((b) => b.kind), ["heading", "text", "heading", "list", "table", "text"]);
+  assert.equal(blocks[1].text, "We deliver in 2 hours.");
+  assert.deepEqual(blocks[3].items, ["Indiranagar", "Domlur"]);
+  assert.deepEqual([blocks[4].header, blocks[4].rows], [["Item", "Price"], [["Atta", "₹265"]]]);
+  assert.ok(!JSON.stringify(blocks).includes("About") && !JSON.stringify(blocks).includes("2026"), "nav and footer are skipped");
+});
+
+test("groupContext: sections merged, passages inside earlier blocks folded in, labels with section and page, token budget", () => {
+  const sec = "Electronics: 10 days.\nGroceries: 7 days.";
+  const g = groupContext(
+    [
+      { id: 1, title: "Policies", url: null, headingPath: "Returns › Electronics", page: 4, content: "Electronics: 10 days.", context: sec },
+      { id: 2, title: "Policies", url: null, headingPath: "Returns › Groceries", page: 4, content: "Groceries: 7 days.", context: sec },
+      { id: 3, title: "Menu", url: "https://x.in/menu", headingPath: "", page: null, content: "Dosa ₹80", context: null },
+      { id: 4, title: "Big", url: null, headingPath: "", page: null, content: "x", context: "word ".repeat(4000) },
+    ],
+    300
+  );
+  assert.deepEqual(g.map((x) => [x.n, x.ids]), [[1, [1, 2]], [2, [3]]], "same section once; the over-budget block is left out");
+  assert.equal(g[0].label, "Policies › Returns › Electronics (page 4)");
+  assert.equal(g[1].label, "Menu");
+  assert.equal(g[1].text, "Dosa ₹80", "no context: the passage itself");
+});
+
+test("languageOf: scripts, Hinglish vs English", async () => {
+  const { languageOf } = await import("../src/insights.ts");
+  assert.equal(languageOf("What is the price of basmati rice?"), "en");
+  assert.equal(languageOf("basmati rice ka price kya hai"), "hinglish");
+  assert.equal(languageOf("kitna hai?"), "hinglish");
+  assert.equal(languageOf("delivery kab tak hogi"), "hinglish");
+  assert.equal(languageOf("Is Sunday open to the public?"), "en");
+  assert.equal(languageOf("चावल की कीमत क्या है?"), "hi");
+  assert.equal(languageOf("அரிசி விலை என்ன?"), "ta");
+  assert.equal(languageOf("ধন্যবাদ"), "bn");
+  assert.equal(languageOf("123 ???"), "other");
+});
+
+test("topicOf: English, Hinglish and Hindi questions", async () => {
+  const { topicOf, questionKey } = await import("../src/insights.ts");
+  assert.equal(topicOf("How much is the rice?"), "price");
+  assert.equal(topicOf("rice ka daam batao"), "price");
+  assert.equal(topicOf("चावल की कीमत"), "price");
+  assert.equal(topicOf("Where is my order? It's late"), "order_status");
+  assert.equal(topicOf("Can I get a refund on this price?"), "returns");
+  assert.equal(topicOf("Do you deliver to Pune?"), "delivery");
+  assert.equal(topicOf("Are you open on Sunday?"), "hours");
+  assert.equal(topicOf("Tell me a joke"), "other");
+  assert.equal(questionKey("  What's the PRICE?? "), "what s the price");
+});
+
+test("agentHealth and churnRisk", async () => {
+  const { agentHealth, churnRisk } = await import("../src/insights.ts");
+  const good = agentHealth({ answers: 100, errors: 0, gaps: 5, thumbsUp: 10, thumbsDown: 1, readySources: 3, failedSources: 0, qaAnswers: 2 });
+  assert.deepEqual(good, { score: 100, issues: [] });
+  const bad = agentHealth({ answers: 50, errors: 5, gaps: 25, thumbsUp: 1, thumbsDown: 4, readySources: 1, failedSources: 1, qaAnswers: 0 });
+  assert.ok(bad.score < 40, JSON.stringify(bad));
+  assert.match(bad.issues[0], /not in its sources/);
+  assert.equal(agentHealth({ answers: 0, errors: 0, gaps: 0, thumbsUp: 0, thumbsDown: 0, readySources: 0, failedSources: 0, qaAnswers: 0 }).score, 60);
+
+  const base = { subscriptionStatus: "active", cancelAtPeriodEnd: false, answersLast14: 100, answersPrev14: 100, daysSinceLastAnswer: 0, gapRate: 0.1, thumbsDownRate: 0 };
+  assert.equal(churnRisk(base).level, "low");
+  assert.equal(churnRisk({ ...base, cancelAtPeriodEnd: true }).level, "high");
+  const drop = churnRisk({ ...base, answersLast14: 30 });
+  assert.equal(drop.level, "medium");
+  assert.match(drop.reasons[0], /usage down 70%/);
+  assert.equal(churnRisk({ ...base, daysSinceLastAnswer: null, answersLast14: 0, answersPrev14: 0 }).reasons[0], "never had a real conversation");
+});
+
+test("voice audio: μ-law round trip, resampling, WAV, loudness", async () => {
+  const { ulawDecode, ulawEncode, resample, toWav, fromWav, rms, tone, pcmFromBytes, pcmToBytes } = await import("../src/voice/audio.ts");
+  const t = tone(100, 8000, 440, 8000);
+  const back = ulawDecode(ulawEncode(t));
+  assert.ok(t.every((v, i) => Math.abs(v - back[i]) <= Math.max(16, Math.abs(v) * 0.04)), "μ-law keeps the waveform");
+  assert.equal(resample(t, 8000, 16000).length, 1600);
+  assert.equal(resample(t, 16000, 8000).length, 400);
+  const w = fromWav(toWav(t, 8000));
+  assert.equal(w.rate, 8000);
+  assert.deepEqual([...w.pcm], [...t]);
+  assert.deepEqual([...pcmFromBytes(pcmToBytes(t))], [...t]);
+  assert.ok(Math.abs(rms(t) - 8000 / Math.SQRT2) < 100);
+  assert.equal(rms(new Int16Array(160)), 0);
+});
+
+test("voice activity detection: speech start and end, noise ignored, preroll kept", async () => {
+  const { Vad } = await import("../src/voice/vad.ts");
+  const { tone } = await import("../src/voice/audio.ts");
+  const vad = new Vad({ rate: 16000, silenceMs: 300, minSpeechMs: 100 });
+  const frames = (pcm) => Array.from({ length: Math.ceil(pcm.length / 320) }, (_, i) => pcm.subarray(i * 320, (i + 1) * 320));
+  const events = [];
+  for (const f of frames(tone(500, 16000, 200, 150))) events.push(...vad.push(f)); // quiet hum: background noise
+  assert.deepEqual(events, []);
+  for (const f of frames(tone(600, 16000, 300, 6000))) events.push(...vad.push(f));
+  assert.deepEqual(events.map((e) => e.type), ["start"]);
+  assert.ok(vad.inSpeech);
+  for (const f of frames(new Int16Array(16000 * 0.4))) events.push(...vad.push(f));
+  const end = events.find((e) => e.type === "end");
+  assert.ok(end && end.ms >= 600 && end.ms < 1500, JSON.stringify(end && end.ms));
+  assert.ok(!vad.inSpeech);
+});
+
+test("speech text: sentences released as they complete; markdown, citations and links removed", async () => {
+  const { SentenceSplitter, cleanForSpeech } = await import("../src/voice/speech-text.ts");
+  const s = new SentenceSplitter();
+  const out = [];
+  for (const d of ["Basmati rice costs ", "Rs. 610 for 5 kg [1]. ", "We deliver ", "in 2.5 days. Anything", " else?"]) out.push(...s.push(d));
+  out.push(...s.flush());
+  assert.deepEqual(out, ["Basmati rice costs Rs. 610 for 5 kg.", "We deliver in 2.5 days.", "Anything else?"]);
+  assert.equal(cleanForSpeech("**Timings:**\n- Mon–Sat 9am–9pm [2]\n- See https://shop.in/hours"), "Timings:\nMon–Sat 9am–9pm\nSee our website");
+});
+
+test("voice tickets: signed, bound to the agent and session, and expire", async () => {
+  process.env.AUTH_SECRET ??= "x".repeat(40);
+  const { voiceTicket, checkVoiceTicket } = await import("../src/voice/ticket.ts");
+  const t = voiceTicket("agent-1", "sess-12345678");
+  assert.deepEqual(checkVoiceTicket(t), { agentId: "agent-1", sessionId: "sess-12345678" });
+  assert.equal(checkVoiceTicket(t.slice(0, -2) + "xx"), null);
+  assert.equal(checkVoiceTicket(voiceTicket("a", "s", -1)), null);
+});
+
+test("phoneFromSession: phone-call sessions map to the caller's number", () => {
+  assert.equal(phoneFromSession("ph_919876543210_CA123"), "+919876543210");
+  assert.equal(phoneFromSession("ph_919876543210"), null);
 });

@@ -70,6 +70,9 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `SARVAM_REASONING_EFFORT` | service default | `none` (recommended for support answers), `low`, `medium` or `high`. |
 | `SARVAM_MAX_TOKENS` | `1024` | Maximum length of one answer. |
 | `VOICE_NOTES` | on when `SARVAM_API_KEY` is set | `off` stops transcribing WhatsApp voice notes. |
+| `VOICE_PUBLIC_URL`, `VOICE_PORT` | off, `3002` | Voice agents (website microphone, phone calls) through the voice gateway: its public address and port. More settings in [voice.md](voice.md). |
+| `TTS_PROVIDER`, `SARVAM_TTS_MODEL` | `sarvam` with a key (else `mock`), `bulbul:v2` | Text-to-speech for voice agents. |
+| `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN` | none | Transfer Plivo calls to the owner. |
 | `SARVAM_STT_MODEL`, `SARVAM_STT_URL`, `SARVAM_STT_LANGUAGE` | `saaras:v3`, `https://api.sarvam.ai/speech-to-text`, `unknown` (auto-detect) | Speech-to-text for voice notes. Set the language (e.g. `hi-IN`) only if all your customers speak one language. |
 | `EMBEDDING_PROVIDER` | `mock` | `mock` (development only) or `openai` (any OpenAI-compatible embeddings endpoint). |
 | `EMBEDDING_API_KEY` | `OPENAI_API_KEY` | Key for the embeddings endpoint. |
@@ -85,7 +88,8 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `ADMIN_URL` | none | Public address of the admin app, e.g. `https://admin.yourdomain.in`. Starting with `https://` turns on secure admin cookies. |
 | `LLM_PRICES` | none | USD per million input/output tokens by model id, e.g. `gpt-4.1-mini=0.40/1.60, claude-haiku-4-5=1/5`. Used for cost tracking; models without a price show tokens only. |
 | `EMBEDDING_PRICE_PER_MTOK` | none | USD per million embedded tokens. |
-| `USD_INR_RATE` | none | Also show costs in rupees in the admin view. |
+| `USD_INR_RATE` | none | Also show costs in rupees in the admin view (profit figures assume 85 when blank). |
+| `ALERT_EMAILS`, `ALERTS` | all admins, on | Who gets operational alert e-mails; `off` stops the checks. Thresholds: `ALERT_WINDOW_MINUTES`, `ALERT_MIN_ANSWERS`, `ALERT_ERROR_RATE`, `ALERT_P95_MS`, `ALERT_FALLBACK_RATE`, `ALERT_FAILED_SOURCES`, `ALERT_COOLDOWN_MINUTES`, `ALERT_CHECK_MS` (see [admin.md](admin.md)). |
 | `LLM_FIRST_TOKEN_TIMEOUT_MS`, `LLM_TIMEOUT_MS` | `20000`, `90000` | Time limits for the first word of an answer and for the whole answer. |
 | `LLM_RETRIES` | `2` | Retries (with backoff) for rate limits, overload, server errors and timeouts, only before any text reaches the customer. |
 | `LLM_FALLBACK_PROVIDER`, `LLM_FALLBACK_MODEL` | off | Backup model used when the main one keeps failing (for example `openai` with a small model). |
@@ -95,7 +99,9 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `HISTORY_MAX_CHARS` | `6000` | How much of the conversation (newest first) is sent with each question. |
 | `EMBEDDING_TIMEOUT_MS`, `EMBEDDING_RETRIES` | `30000`, `3` | Time limit and retries for embedding calls. |
 | `RETRIEVAL_MIN_SCORE` | `0.2` (`0.1` in `.env.example`) | Passages scoring below this similarity are ignored. Tune per embedding model. |
-| `CHUNK_SIZE`, `CHUNK_OVERLAP` | `900`, `120` | Passage size and overlap in characters, for newly indexed sources. Tune with `pnpm eval`. |
+| `CHUNK_TOKENS`, `CONTEXT_TOKENS`, `CONTEXT_MAX_TOKENS` | `180`, `600`, `2400` | Structure-aware chunking: size of the searched passages, the surrounding section given to the model per passage, and the total context per answer (tokens). Tune with `pnpm eval`. |
+| `CHUNKER`, `CHUNK_SIZE`, `CHUNK_OVERLAP` | structured, `900`, `120` | `CHUNKER=flat` returns to the old fixed-size character chunks (size and overlap in characters), for comparisons or an emergency. |
+| `SOURCE_RESYNC_DAYS`, `RESYNC_CHECK_MS` | `7`, `600000` | Websites are re-read this often (`0` = never); the worker looks for due ones every `RESYNC_CHECK_MS`. Unchanged passages keep their embeddings. |
 | `OCR_PROVIDER`, `OCR_MODEL`, `OCR_API_KEY`, `OCR_BASE_URL`, `OCR_TIMEOUT_MS` | off | Read scanned PDFs and photos (JPG, PNG, WEBP) of price lists and menus with a vision model: `openai` (any compatible API) or `anthropic`. Enables image uploads. |
 | `PRERENDER_URL`, `PRERENDER_TIMEOUT_MS` | off, `30000` | A rendering service (URL containing `{url}`, returning rendered HTML) for websites that build their pages with JavaScript. Without it such sites fail with a clear message. |
 | `ANSWER_CACHE`, `ANSWER_CACHE_TTL_HOURS` | on, `24` | Reuse the answer to a visitor's first question asked word for word before (not in the playground). Invalidated automatically when sources, Q&A answers, instructions, the prompt or the model change. |
@@ -142,20 +148,21 @@ connection. Manual connections need no variables.
 | `ALLOW_PRIVATE_URLS` | `false` | Lets URL sources fetch localhost and private addresses. **Never `true` on a public server.** |
 | `SIGNUP_RATE_LIMIT` | `10` | Sign-ups per IP per hour. |
 
-Two more variables exist only for the test scripts (they redirect calls to local fake servers): `WHATSAPP_GRAPH_BASE_URL`
-and `RAZORPAY_API_BASE`. Never set them in production.
+A few more variables exist only for the test scripts (they redirect calls to local fake servers): `WHATSAPP_GRAPH_BASE_URL`,
+`RAZORPAY_API_BASE` and `PLIVO_API_BASE`. Never set them in production.
 
 ## 5. Commands
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` / `pnpm build` / `pnpm start` | Development servers / production build / production servers, for both apps (ports 3000 and 3001). `pnpm dev:web` or `pnpm dev:admin` runs one. |
+| `pnpm dev` / `pnpm build` / `pnpm start` | Development servers / production build / production servers: customer app (3000), admin app (3001), voice gateway (3002). `pnpm dev:web` or `pnpm dev:admin` runs one. |
 | `pnpm migrate` | Applies database migrations (safe to re-run) |
 | `pnpm preflight [--live] [--email you@x.com]` | Checks `.env` and the database; `--live` also tests the external services |
 | `pnpm razorpay:setup` | Creates the monthly INR plans in Razorpay and prints the `RAZORPAY_PLAN_*` lines |
 | `pnpm typecheck` | TypeScript check |
 | `pnpm test` | Unit tests (chunking, encryption, message formatting, handoff phrases, provider helpers) |
-| `pnpm smoke:admin` | Admin sign-in, adding and removing admins, password changes (needs both apps running) |
+| `pnpm smoke:admin`, `smoke:insights` | Admin sign-in and admins; admin insights, actions and alerts (need the apps running) |
+| `pnpm smoke:voice` | Voice agents: website voice, Plivo and Exotel calls, barge-in, transfers (needs the voice gateway running) |
 | `pnpm smoke`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | End-to-end tests against fake external services. See [testing.md](testing.md). |
 
 ## 6. Upgrading

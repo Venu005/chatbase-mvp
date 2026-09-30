@@ -3,6 +3,7 @@ import { embeddingModelId, getEmbedder } from "./providers";
 import { env, envNum } from "./env";
 import { dropNearDuplicates, fuse, keywordCoverage, keywordQuery } from "./keywords";
 import { rerank, rerankConfigured } from "./rerank";
+import { groupContext, type ContextGroup } from "./structure";
 
 export type Retrieved = {
   id: number;
@@ -10,13 +11,18 @@ export type Retrieved = {
   page_title: string;
   page_url: string | null;
   source_title: string;
+  /** "Returns › Electronics" ('' for passages made before structure-aware chunking). */
+  heading_path: string;
+  page: number | null;
+  /** The section (or neighbours) the model reads; NULL = the passage itself. */
+  context: string | null;
   /** Cosine similarity to the question (0 to 1). */
   score: number;
   /** Which search found it: meaning (vector), words (keyword), or both. */
   via?: "vector" | "keyword" | "both";
 };
 
-export type Citation = { n: number; title: string; url: string | null };
+export type Citation = { n: number; title: string; url: string | null; page?: number | null };
 
 /** Bump when the system prompt changes meaningfully: stored with every answer so quality changes can be traced. */
 export const PROMPT_VERSION = "2026-09-29.1";
@@ -55,9 +61,10 @@ async function searchChunks(agentId: string, vec: number[], text: string): Promi
   const k = Math.max(1, Math.round(envNum("RETRIEVAL_TOP_K", 6)));
   const minScore = envNum("RETRIEVAL_MIN_SCORE", 0.2);
   const pool = Math.max(k * 3, 20); // candidates per search before fusion
-  const cols = `c.id, c.content, c.page_title, c.page_url, s.title AS source_title, 1 - (c.embedding <=> $2::vector) AS score`;
-  // Vectors from another embedding model can't be compared, so only the current model's passages are searched.
-  const where = `c.agent_id = $1 AND s.status = 'ready' AND (c.embedding_model IS NULL OR c.embedding_model = $3)`;
+  const cols = `c.id, c.content, c.page_title, c.page_url, c.heading_path, c.page, c.context, s.title AS source_title, 1 - (c.embedding <=> $2::vector) AS score`;
+  // Only the current embedding model's vectors can be compared. A source's passages stay searchable while it is being
+  // refreshed (they are replaced in one transaction when the refresh finishes).
+  const where = `c.agent_id = $1 AND (c.embedding_model IS NULL OR c.embedding_model = $3)`;
   const params = [agentId, toVector(vec), embeddingModelId()];
   const tsq = env("HYBRID_SEARCH")?.toLowerCase() === "off" ? null : keywordQuery(text);
 
@@ -76,7 +83,7 @@ async function searchChunks(agentId: string, vec: number[], text: string): Promi
   const inVector = new Set(vector.map((r) => Number(r.id)));
   // A passage found only by its words must share at least KEYWORD_MIN_COVERAGE (default half) of the question's words.
   const minCover = envNum("KEYWORD_MIN_COVERAGE", 0.5);
-  const words = byWords.filter((r) => inVector.has(Number(r.id)) || keywordCoverage(text, r.content + " " + (r.page_title || r.source_title)) >= minCover);
+  const words = byWords.filter((r) => inVector.has(Number(r.id)) || keywordCoverage(text, `${r.content} ${r.page_title || r.source_title} ${r.heading_path}`) >= minCover);
   const ranked: Retrieved[] = words.length
     ? fuse([vector, words], (r) => Number(r.id)).map(({ item, in: lists }) => ({
         ...item,
@@ -86,7 +93,7 @@ async function searchChunks(agentId: string, vec: number[], text: string): Promi
   const unique = dropNearDuplicates(ranked);
   if (rerankConfigured()) {
     const candidates = unique.slice(0, 20);
-    const order = await rerank(text, candidates.map((c) => `${c.page_title || c.source_title}\n${c.content}`), k);
+    const order = await rerank(text, candidates.map((c) => `${[c.page_title || c.source_title, c.heading_path].filter(Boolean).join(" › ")}\n${c.content}`), k);
     if (order) return order.map((i) => candidates[i]);
   }
   return unique.slice(0, k);
@@ -98,11 +105,8 @@ export function buildSystemPrompt(
   opts: { canHandoff?: boolean; fixes?: FixMatch[] } = {}
 ): string {
   const fixes = opts.fixes ?? [];
-  const context = chunks
-    .map((c, i) => {
-      const title = c.page_title || c.source_title;
-      return `[${i + 1}] ${title}${c.page_url ? ` (${c.page_url})` : ""}\n${c.content}`;
-    })
+  const context = contextGroups(chunks)
+    .map((g) => `[${g.n}] ${g.label}${g.url ? ` (${g.url})` : ""}\n${g.text}`)
     .join("\n\n");
 
   return [
@@ -131,14 +135,22 @@ ${
     .join("\n\n");
 }
 
+/** The numbered context blocks for these passages (same numbering in the prompt and in the citations). */
+export function contextGroups(chunks: Retrieved[]): ContextGroup[] {
+  return groupContext(
+    chunks.map((c) => ({
+      id: Number(c.id),
+      title: c.page_title || c.source_title,
+      url: c.page_url,
+      headingPath: c.heading_path ?? "",
+      page: c.page ?? null,
+      content: c.content,
+      context: c.context ?? null,
+    })),
+    envNum("CONTEXT_MAX_TOKENS", 2400)
+  );
+}
+
 export function toCitations(chunks: Retrieved[]): Citation[] {
-  const seen = new Set<string>();
-  const out: Citation[] = [];
-  chunks.forEach((c, i) => {
-    const key = c.page_url ?? c.page_title ?? c.source_title;
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push({ n: i + 1, title: c.page_title || c.source_title, url: c.page_url });
-  });
-  return out;
+  return contextGroups(chunks).map((g) => ({ n: g.n, title: g.label, url: g.url, page: g.page }));
 }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { q, q1 } from "@chatbase/core/db";
 import { HttpError, handle } from "@chatbase/core/http";
 import { envAdminEmails, hashPassword, requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,5 +42,6 @@ export const POST = handle(async (req) => {
     [email, name, await hashPassword(password), me.id]
   );
   if (!row) throw new HttpError(409, "That e-mail is already an admin");
+  await audit(me, "admin.add", null, { email });
   return NextResponse.json({ id: row.id, email, name }, { status: 201 });
 });

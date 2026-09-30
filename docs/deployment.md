@@ -1,8 +1,8 @@
 # Deploying to a server
 
 A small VM is enough to start (2 vCPU, 2-4 GB RAM) plus a Postgres with pgvector. There are two long-running Node
-processes: the customer app (`apps/web`, which also runs the ingestion worker) and the admin app (`apps/admin`). Both read
-the one `.env` at the repo root.
+processes: the customer app (`apps/web`, which also runs the ingestion worker) and the admin app (`apps/admin`), plus the
+voice gateway (`apps/voice`) if you use voice agents. All read the one `.env` at the repo root.
 
 ## Checklist
 
@@ -61,6 +61,23 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 ```
 
+```ini
+# /etc/systemd/system/chatbase-india-voice.service (only for voice agents: docs/voice.md)
+[Unit]
+Description=Chatbase India voice gateway
+After=network.target
+
+[Service]
+WorkingDirectory=/srv/chatbase-india/apps/voice
+ExecStart=/srv/chatbase-india/apps/voice/node_modules/.bin/tsx src/server.ts
+Restart=always
+User=chatbase
+Environment=NODE_ENV=production VOICE_PORT=3002
+
+[Install]
+WantedBy=multi-user.target
+```
+
 The services run `next start` directly (what `pnpm start` runs), so pnpm is not needed at runtime. Change `-p` to use
 other ports.
 
@@ -76,6 +93,11 @@ admin.yourdomain.in {
     # @blocked not remote_ip 203.0.113.0/24
     # respond @blocked 404
     reverse_proxy 127.0.0.1:3001
+}
+
+voice.yourdomain.in {
+    # WebSockets pass through; set VOICE_PUBLIC_URL=https://voice.yourdomain.in
+    reverse_proxy 127.0.0.1:3002
 }
 ```
 
@@ -93,7 +115,9 @@ through your own proxy**, never directly to the internet.
 - **WhatsApp replies run in the background of the web process** after the webhook is answered. That is fine on a normal
   server; on serverless platforms move them to a queue first.
 - The website widget's human-handoff polling is plain HTTP polling every 4 seconds while a person is handling a chat, so it
-  needs no special proxy settings (no websockets).
+  needs no special proxy settings (no websockets). Voice agents do use WebSockets, on the separate voice gateway.
+- **Voice sessions live in the gateway process** that took the call: restarting it ends calls in progress. Restart it
+  outside busy hours; several gateways can run behind a load balancer (each call stays on one).
 
 ## Security and privacy checklist
 

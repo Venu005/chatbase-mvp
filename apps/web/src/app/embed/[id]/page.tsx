@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import ChatBox, { type LeadConfig } from "@/components/ChatBox";
 import { q1 } from "@chatbase/core/db";
 import { embedAllowed } from "@chatbase/core/domains";
+import { env } from "@chatbase/core/env";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,9 @@ export default async function EmbedPage({ params }: { params: Promise<{ id: stri
     lead_mode: LeadConfig["mode"];
     lead_fields: LeadConfig["fields"];
     lead_message: string;
+    voice_enabled: boolean;
   }>(
-    "SELECT name, welcome_message, brand_color, handoff_enabled, allowed_domains, lead_mode, lead_fields, lead_message FROM agents WHERE id = $1",
+    "SELECT name, welcome_message, brand_color, handoff_enabled, allowed_domains, lead_mode, lead_fields, lead_message, voice_enabled FROM agents WHERE id = $1",
     [id]
   );
   if (!agent) notFound();
@@ -43,6 +45,7 @@ export default async function EmbedPage({ params }: { params: Promise<{ id: stri
       <header className="embed-head" style={{ background: agent.brand_color }}>{agent.name}</header>
       <ChatBox agentId={id} welcome={agent.welcome_message} color={agent.brand_color} channel="widget" handoffEnabled={agent.handoff_enabled}
         lead={{ mode: agent.lead_mode, fields: agent.lead_fields, message: agent.lead_message }}
+        voice={agent.voice_enabled && !!env("VOICE_PUBLIC_URL")}
       />
     </div>
   );

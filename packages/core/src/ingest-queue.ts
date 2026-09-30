@@ -1,6 +1,7 @@
 import { q, q1 } from "./db";
 import { envNum, env } from "./env";
 import { PermanentIngestError, fetchDocs, looksScanned, pdfText, writeChunks, type Doc } from "./ingest";
+import { csvToBlocks, textToBlocks, type Block } from "./structure";
 import { OCR_IMAGE_TYPES, ocr, ocrConfigured } from "./ocr";
 import { recordOcr } from "./ai-log";
 import { normalizeText } from "./chunk";
@@ -59,7 +60,8 @@ export function isTransient(e: unknown): boolean {
   return /failed with HTTP (5\d\d|429|408)|Could not resolve/.test(err?.message ?? "");
 }
 
-type Job = { id: string; agent_id: string; type: string; url: string | null; crawl_pages: number; attempts: number };
+/** `chunk_count` > 0 means the source was indexed before: this run is a refresh (re-sync or re-index). */
+type Job = { id: string; agent_id: string; type: string; url: string | null; crawl_pages: number; attempts: number; chunk_count: number };
 
 /** Claims one due job, or null. */
 async function claim(): Promise<Job | null> {
@@ -69,7 +71,7 @@ async function claim(): Promise<Job | null> {
         SELECT id FROM sources
          WHERE status = 'processing' AND run_after <= now() AND (locked_until IS NULL OR locked_until < now())
          ORDER BY run_after FOR UPDATE SKIP LOCKED LIMIT 1)
-      RETURNING id, agent_id, type, url, crawl_pages, attempts`,
+      RETURNING id, agent_id, type, url, crawl_pages, attempts, chunk_count`,
     [String(LEASE_MINUTES)]
   );
 }
@@ -84,6 +86,7 @@ async function docsFor(job: Job): Promise<Doc[]> {
   if (!p?.file) throw new PermanentIngestError("The original content of this source wasn't kept. Remove it and add it again.");
   const title = (await q1<{ title: string }>("SELECT title FROM sources WHERE id = $1", [job.id]))?.title ?? "upload";
   let text: string;
+  let blocks: Block[] | undefined;
   const bytes = new Uint8Array(p.file);
   const ext = p.file_ext ?? "";
   // Scanned PDFs (almost no text layer) and photos are read by a vision model when OCR is set up.
@@ -101,13 +104,13 @@ async function docsFor(job: Job): Promise<Doc[]> {
     return normalizeText(r.text);
   };
   if (ext === "pdf") {
-    let r: { text: string; pages: number };
+    let r: { text: string; pages: number; blocks: Block[] };
     try {
       r = await pdfText(bytes);
     } catch (e) {
       throw new PermanentIngestError(`Couldn't read this file: ${(e as Error).message}`);
     }
-    if (!looksScanned(r)) text = r.text;
+    if (!looksScanned(r)) (text = r.text), (blocks = r.blocks);
     else if (!r.text.trim()) text = await readWithOcr("application/pdf");
     else {
       // Some text, but very little: try OCR, and keep what the PDF had if OCR isn't available or fails.
@@ -122,8 +125,10 @@ async function docsFor(job: Job): Promise<Doc[]> {
     text = await readWithOcr(OCR_IMAGE_TYPES[ext]);
   } else {
     text = normalizeText(new TextDecoder("utf-8").decode(bytes));
+    // CSV rows keep their column names; Markdown/TXT keep their headings, lists and tables.
+    blocks = ext === "csv" ? csvToBlocks(new TextDecoder("utf-8").decode(bytes)) : textToBlocks(text);
   }
-  const docs = [{ title, url: null, text }];
+  const docs: Doc[] = [{ title, url: null, text, blocks: blocks ?? textToBlocks(text) }];
   // Keep the extracted text (for retries and re-indexing), not the file.
   await q("UPDATE source_payloads SET docs = $2, file = NULL WHERE source_id = $1", [job.id, JSON.stringify(docs)]);
   return docs;
@@ -133,7 +138,8 @@ async function run(job: Job): Promise<void> {
   try {
     const r = await writeChunks(job.id, job.agent_id, await docsFor(job));
     await q(
-      "UPDATE sources SET status = 'ready', error = NULL, char_count = $2, chunk_count = $3, locked_until = NULL, updated_at = now() WHERE id = $1",
+      `UPDATE sources SET status = 'ready', error = NULL, char_count = $2, chunk_count = $3, locked_until = NULL, last_synced_at = now(), updated_at = now()
+        WHERE id = $1`,
       [job.id, r.chars, r.chunks]
     );
   } catch (e) {
@@ -145,6 +151,12 @@ async function run(job: Job): Promise<void> {
         [job.id, `Retrying (attempt ${job.attempts} of ${maxAttempts()} failed): ${message}`, String(delay)]
       );
       setTimeout(kick, delay + 50);
+    } else if (job.chunk_count > 0) {
+      // A refresh that failed: the previous passages are still there and searchable, so keep the source usable.
+      await q("UPDATE sources SET status = 'ready', error = $2, locked_until = NULL, updated_at = now() WHERE id = $1", [
+        job.id,
+        `Last refresh failed (${new Date().toISOString().slice(0, 10)}): ${message}`.slice(0, 480),
+      ]);
     } else {
       await q("UPDATE sources SET status = 'failed', error = $2, locked_until = NULL, updated_at = now() WHERE id = $1", [job.id, message]);
     }
@@ -178,10 +190,32 @@ export function kick(): void {
 }
 
 /** Called once per server process. Polls for due jobs (new ones also wake it immediately via kick()). */
+/**
+ * Queues website sources that haven't been read for SOURCE_RESYNC_DAYS (default 7; 0 = never), so answers follow the
+ * site's changes. Thanks to content hashes, unchanged passages cost nothing. Safe with several servers (SKIP LOCKED).
+ */
+export async function scheduleResyncs(): Promise<number> {
+  const days = envNum("SOURCE_RESYNC_DAYS", 7);
+  if (days <= 0) return 0;
+  const rows = await q(
+    `UPDATE sources SET status = 'processing', attempts = 0, locked_until = NULL, run_after = now(), updated_at = now()
+      WHERE id IN (
+        SELECT id FROM sources
+         WHERE type = 'url' AND status = 'ready' AND last_synced_at < now() - ($1 || ' days')::interval
+         ORDER BY last_synced_at FOR UPDATE SKIP LOCKED LIMIT 20)
+      RETURNING id`,
+    [String(days)]
+  );
+  if (rows.length) kick();
+  return rows.length;
+}
+
 export function startIngestWorker(): void {
   if (state.started || env("INGEST_WORKER")?.toLowerCase() === "off") return;
   state.started = true;
   state.timer = setInterval(kick, envNum("INGEST_POLL_MS", 3000));
   state.timer.unref?.();
+  const resync = setInterval(() => void scheduleResyncs().catch((e) => console.error("Scheduling re-syncs failed:", (e as Error).message)), envNum("RESYNC_CHECK_MS", 10 * 60_000));
+  resync.unref?.();
   kick();
 }

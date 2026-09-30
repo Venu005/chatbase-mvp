@@ -47,9 +47,37 @@ Pick **Today**, **7**, **30** or **90 days** (Indian time). Owners' playground t
 | Tab | What you see |
 | --- | --- |
 | **Overview** | Active, new and paying accounts; answers and conversations; failed answers (with cut-off and backup-model counts); time to the first word (average and p95); AI cost in USD and rupees, per answer; helpful rate and share of answers with nothing found in the sources. Charts of answers and cost per day. The top accounts. |
-| **Accounts** | Every account: plan, credits used this month (the bar turns red above 90 %), agents, conversations, answers, failed answers, 👎, AI cost, last activity. Click one for its agents (sources, passages, Q&A answers, channels, knowledge-gap rate, leads, cost) and its latest AI calls. |
+| **Business** | MRR and ARR (paid plans only; plans an admin set by hand are "comped" and not revenue), paying and comped accounts, average revenue per account, AI cost and gross margin over the last 30 days, revenue at risk (subscriptions cancelling or with failing renewals), new paid and churned subscriptions in the period. The plan mix with MRR, AI cost and margin per plan, and **profit per account** (plan price minus AI cost, worst first) so unprofitable accounts stand out. |
+| **Growth** | The signup funnel for accounts that signed up in the period (created an agent → added knowledge → got a real conversation → paying); weekly cohorts (share of each signup week's accounts still getting real conversations 0–7 weeks later); **paying accounts at risk** with the reasons (cancelling, payment failing, no conversations for 10+ days, usage down by half, many unanswered questions or 👎); **upgrade candidates** (80 % of this month's credits used, or on course to run out). |
+| **Quality** | Across all agents: the languages visitors write in (English, Hinglish, Hindi and other Indian scripts), topics (prices, delivery, returns, order status, payment, hours…) with how often each goes unanswered, the most asked questions and most common knowledge gaps, channels (with hand-offs to a person), busy hours by weekday in India time, and a 0–100 **health score** per agent with its issues. |
+| **Accounts** | Every account: plan, credits used this month (the bar turns red above 90 %), agents, conversations, answers, failed answers, 👎, AI cost, last activity. Click one for its agents (sources, passages, Q&A answers, channels, knowledge-gap rate, leads, cost), its latest AI calls, and the **actions** below. |
 | **Problems** | Answers that failed, were cut off, needed retries, or were written by the backup model, with the error. |
-| **Models & ingestion** | Calls, failures, tokens, average time to the first word and cost per model; the ingestion queue (waiting, running, ready, failed, with each failure's error); the embedding model status and **Re-index**. |
+| **Operations** | Alerts firing now (and **Check now**), answer-cache hit rate, time for new sources to become ready, per-day answers, failure rate, backup-model share and first-word p50/p95 for each provider; then calls, tokens and cost per model, the ingestion queue, and the embedding model status with **Re-index**. |
+| **Audit log** | Every admin action: plan changes, credit grants, conversations read, admins added or removed, re-indexing. |
+
+### Actions on an account
+
+- **Change plan**: sets the plan by hand, with a reason (a trial, a partner, a goodwill upgrade). Paid plans set this way are
+  *comped*: they aren't counted as revenue, and the account's next Razorpay payment event replaces them. You're warned when
+  the account has a live subscription.
+- **Grant credits**: adds bonus credits for this month on top of the plan's (a negative number takes them back), with a reason.
+- **Show conversations**: the account's latest conversations and their messages, read-only, for support. Each look is
+  written to the audit log, because these are the customer's visitors' messages.
+
+### Alerts
+
+The customer app checks every 5 minutes (`ALERT_CHECK_MS`) over the last 15 minutes (`ALERT_WINDOW_MINUTES`) and e-mails
+the admins (or `ALERT_EMAILS`) through `SMTP_URL`, at most once an hour per alert (`ALERT_COOLDOWN_MINUTES`):
+
+| Alert | When (defaults) |
+| --- | --- |
+| Answers failing (critical) | more than 5 % of answers failed (`ALERT_ERROR_RATE`), with at least 20 answers (`ALERT_MIN_ANSWERS`) |
+| Slow answers | the 95th-percentile time to the first word is above 8 s (`ALERT_P95_MS`) |
+| Backup model | the backup model wrote more than 30 % of answers (`ALERT_FALLBACK_RATE`) |
+| Ingestion stuck (critical) | a source has waited over 30 minutes to be read (no worker running?) |
+| Sources failing | 5 or more sources failed to load (`ALERT_FAILED_SOURCES`) |
+
+Firing alerts also show as a red banner at the top of the admin app. `ALERTS=off` stops the checks (the test setup uses it).
 
 **Answer trace**: click any answer (in Problems or an account's latest calls) to see the question, the answer, the result
 (and the visitor's 👍/👎), the model, attempts, timings, tokens, cost, prompt version, the error if any, the Q&A answers that
@@ -73,6 +101,6 @@ without a price shows "no price". Mock models cost nothing.
 
 Vectors from different embedding models can't be compared, so every passage records the model that made it and search only
 uses the current model's passages. After changing `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` (and `EMBEDDING_DIM`, which needs
-a fresh column), open **Models & ingestion** and press **Re-index** (the customer app's ingestion worker does the work): websites are read again, files and pasted text are
+a fresh column), open **Operations** and press **Re-index** (the customer app's ingestion worker does the work): websites are read again, files and pasted text are
 re-embedded from the content kept when they were added, and Q&A answers are re-embedded. Sources added before content was
 kept are listed so their owners can re-add them.

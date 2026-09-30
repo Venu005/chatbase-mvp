@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start --port ${ADMIN_PORT:-3001}",
     "typecheck": "tsc --noEmit",
-    "smoke": "node --env-file-if-exists=../../.env scripts/smoke-admin.mjs"
+    "smoke": "node --env-file-if-exists=../../.env scripts/smoke-admin.mjs",
+    "smoke:insights": "node --env-file-if-exists=../../.env scripts/smoke-insights.mjs"
   },
   "dependencies": {
     "@chatbase/core": "workspace:*",

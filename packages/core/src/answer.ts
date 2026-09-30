@@ -1,5 +1,5 @@
 import { q, q1 } from "./db";
-import { HttpError } from "./http";
+import { HttpError } from "./errors";
 import { getFallbackLLM, getLLM, getSmallLLM } from "./providers";
 import { isSmallTalk, route, type Route } from "./routing";
 import { newRun, resilientStream, type Run } from "./providers/resilient";
@@ -32,7 +32,15 @@ export type AnswerAgent = {
   lead_mode: "off" | "after_first_answer" | "before_chat";
   knowledge_version: string;
 };
-export type Channel = "widget" | "playground" | "whatsapp";
+export type Channel = "widget" | "playground" | "whatsapp" | "voice" | "phone";
+
+export const isVoice = (c: Channel) => c === "voice" || c === "phone";
+
+/** Added to the prompt when the answer will be spoken (website voice mode, phone calls). */
+const VOICE_STYLE = `
+Your reply will be spoken aloud by a voice assistant, not read. Answer in one to three short, natural sentences.
+Do not use lists, markdown, headings, emojis, [n] citation markers or links. Say prices and numbers the way people say
+them. If the answer is long, give the key point and offer to share more.`;
 
 const HISTORY_TURNS = 10;
 
@@ -125,7 +133,9 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
     const main = getLLM();
     const small = getSmallLLM();
     const models = `${main.name}:${main.model}${small ? `|${small.name}:${small.model}` : ""}`;
-    const key = channel !== "playground" && answerCacheEnabled() && !prior.some((m) => m.role === "user") ? questionKey(message) : null;
+    // Spoken answers are written differently (short, no lists), so they are cached separately from typed ones.
+    const key =
+      channel !== "playground" && answerCacheEnabled() && !prior.some((m) => m.role === "user") ? `${isVoice(channel) ? "voice:" : ""}${questionKey(message)}` : null;
     const cache = key ? { key, knowledgeVersion: agent.knowledge_version, model: models } : null;
     if (cache) {
       const hit = await q1<{ answer: string; citations: Citation[]; knowledge_gap: boolean }>(
@@ -183,7 +193,7 @@ export async function prepareAnswer(agent: AnswerAgent, sessionId: string, chann
       promptVersion: PROMPT_VERSION,
       retrieved: chunks.map((c) => ({ chunkId: Number(c.id), score: Math.round(c.score * 1000) / 1000, title: c.page_title || c.source_title, url: c.page_url, via: c.via })),
       fixes: fixes.map((f) => ({ id: f.id, score: Math.round(f.score * 1000) / 1000, question: f.question })),
-      system: buildSystemPrompt(agent, chunks, { canHandoff: agent.handoff_enabled && channel !== "playground", fixes }),
+      system: buildSystemPrompt(agent, chunks, { canHandoff: agent.handoff_enabled && channel !== "playground", fixes }) + (isVoice(channel) ? VOICE_STYLE : ""),
       history,
       citations: toCitations(chunks),
       fixMatched: fixes.length > 0,

@@ -12,7 +12,7 @@ const priceTable = () => (prices ??= parsePrices(env("LLM_PRICES")));
 export async function recordAnswer(
   p: Prepared,
   run: Run,
-  o: { status: "ok" | "partial" | "error"; messageId?: number | null; error?: unknown; answer?: string }
+  o: { status: "ok" | "partial" | "error"; messageId?: number | null; error?: unknown; answer?: string; firstAudioMs?: number | null }
 ): Promise<void> {
   try {
     // A call that broke off mid-answer never reports usage, but the provider still bills it: estimate.
@@ -25,8 +25,8 @@ export async function recordAnswer(
     await q(
       `INSERT INTO ai_calls (user_id, agent_id, conversation_id, message_id, kind, channel, provider, model, prompt_version, status, error,
                              input_tokens, output_tokens, tokens_estimated, cost_usd, first_token_ms, total_ms, attempts, fallback_used,
-                             question, retrieved, fixes, search_query, rewrite_model, rewrite_tokens)
-       VALUES ($1,$2,$3,$4,'answer',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+                             question, retrieved, fixes, search_query, rewrite_model, rewrite_tokens, first_audio_ms)
+       VALUES ($1,$2,$3,$4,'answer',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
       [
         p.userId,
         p.agentId,
@@ -52,6 +52,7 @@ export async function recordAnswer(
         p.searchQuery === p.question ? null : p.searchQuery.slice(0, 1000),
         p.rewrite?.model ?? null,
         p.rewrite?.usage ? p.rewrite.usage.inputTokens + p.rewrite.usage.outputTokens : 0,
+        o.firstAudioMs ?? null,
       ]
     );
   } catch (e) {

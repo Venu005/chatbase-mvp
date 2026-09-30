@@ -23,8 +23,9 @@ export function wantsHuman(text: string): boolean {
   return [EN_VERB_TARGET, EN_LIVE, EN_CALL, EN_ALONE, HI_A, HI_B, HG_A, HG_B].some((re) => re.test(t));
 }
 
-/** "wa_919876543210" (WhatsApp session id) -> "+919876543210"; anything else -> null. */
+/** "wa_919876543210" (WhatsApp) or "ph_919876543210_<call>" (phone call) session id -> "+919876543210"; else null. */
 export function phoneFromSession(sessionId: string): string | null {
-  const m = /^wa_(\d{6,20})$/.exec(sessionId);
-  return m ? `+${m[1]}` : null;
+  const m = /^(?:wa_(\d{6,20})|ph_(\d{6,20})_[A-Za-z0-9-]+)$/.exec(sessionId);
+  if (m) return `+${m[1] ?? m[2]}`;
+  return null;
 }

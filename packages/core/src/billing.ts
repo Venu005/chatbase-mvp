@@ -33,7 +33,7 @@ type WebhookBody = {
 
 async function setPlanIfNoOtherLive(userId: string, exceptSubId: string, plan: string) {
   await q(
-    `UPDATE users SET plan = $3 WHERE id = $1
+    `UPDATE users SET plan = $3, plan_comped = false WHERE id = $1
        AND NOT EXISTS (SELECT 1 FROM subscriptions WHERE user_id = $1 AND id <> $2 AND status = ANY($4))`,
     [userId, exceptSubId, plan, LIVE_STATES]
   );
@@ -73,7 +73,7 @@ export async function applyBillingEvent(body: WebhookBody): Promise<string> {
     case "subscription.charged":
     case "subscription.resumed":
       await set("active");
-      await q("UPDATE users SET plan = $2 WHERE id = $1", [sub.user_id, sub.plan]);
+      await q("UPDATE users SET plan = $2, plan_comped = false WHERE id = $1", [sub.user_id, sub.plan]);
       return `plan ${sub.plan} active`;
     case "subscription.updated":
       await set(sub.status);

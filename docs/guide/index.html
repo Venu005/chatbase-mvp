@@ -22,6 +22,8 @@
   --branch-soft: #e7eefc;
   --pr3: #6d28d9;
   --pr3-soft: #f0e9fd;
+  --pr4: #a16207;
+  --pr4-soft: #fdf4dc;
   --code-bg: #eef2f2;
   --shadow: 0 1px 2px rgba(20, 25, 27, .06), 0 8px 24px rgba(20, 25, 27, .06);
   --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
@@ -44,6 +46,8 @@
     --branch-soft: #1a2542;
     --pr3: #c4b0f7;
     --pr3-soft: #2a1f47;
+    --pr4: #f2c46d;
+    --pr4-soft: #3a2c10;
     --code-bg: #1e2629;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
   }
@@ -63,6 +67,8 @@
   --branch-soft: #1a2542;
   --pr3: #c4b0f7;
   --pr3-soft: #2a1f47;
+  --pr4: #f2c46d;
+  --pr4-soft: #3a2c10;
   --code-bg: #1e2629;
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
 }
@@ -100,6 +106,7 @@ section { display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 2
 .eyebrow { font: 600 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
 .lede { font-size: 19px; color: var(--muted); max-width: 64ch; }
 .prose { max-width: 70ch; display: flex; flex-direction: column; gap: 12px; }
+p.prose { display: block; }
 .muted { color: var(--muted); }
 .small { font-size: 14px; }
 
@@ -113,6 +120,7 @@ section { display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 2
 .tag.new { background: var(--new-soft); color: var(--new); }
 .tag.branch { background: var(--branch-soft); color: var(--branch); }
 .tag.pr3 { background: var(--pr3-soft); color: var(--pr3); }
+.tag.pr4 { background: var(--pr4-soft); color: var(--pr4); }
 .results td.up { color: var(--accent); font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; color: var(--muted); }
 
@@ -183,6 +191,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
       <li class="sub"><a href="#domains">Allowed websites</a></li>
       <li class="sub"><a href="#whatsapp">WhatsApp</a></li>
       <li class="sub"><a href="#voice">Voice notes</a></li>
+      <li><a href="#voice-agents">Voice agents</a></li>
       <li><a href="#conversations">Conversations</a></li>
       <li class="sub"><a href="#inbox">Inbox and handoff</a></li>
       <li class="sub"><a href="#feedback">Answer feedback</a></li>
@@ -194,10 +203,14 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
       <li><a href="#prod">AI in production</a></li>
       <li class="sub"><a href="#reliability">Reliability</a></li>
       <li class="sub"><a href="#search">Search quality</a></li>
+      <li class="sub"><a href="#chunking">Reading documents</a></li>
       <li class="sub"><a href="#cost">Cost controls</a></li>
       <li class="sub"><a href="#hard-sources">Hard-to-read sources</a></li>
       <li class="sub"><a href="#eval">Quality evaluation</a></li>
       <li><a href="#admin">Admin view</a></li>
+      <li class="sub"><a href="#admin-business">Business and growth</a></li>
+      <li class="sub"><a href="#admin-quality">Quality and operations</a></li>
+      <li class="sub"><a href="#admin-actions">Actions and audit log</a></li>
       <li><a href="#safety">Safety and limits</a></li>
       <li><a href="#deploy">Go-live checklist</a></li>
       <li><a href="#testing">Testing</a></li>
@@ -208,14 +221,14 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
   <main>
     <!-- ================================================================ -->
     <header class="hero" id="overview">
-      <span class="eyebrow">Product guide · 25 September 2026</span>
+      <span class="eyebrow">Product guide · 30 September 2026</span>
       <h1>Chatbase India</h1>
-      <p class="lede">An AI support assistant for Indian small businesses. You train it on your website, PDFs and FAQs. It answers customers on your website and on WhatsApp, in Hindi, Hinglish, English and other Indian languages. When it can't answer, a person from your team takes over.</p>
+      <p class="lede">An AI support assistant for Indian small businesses. You train it on your website, PDFs and FAQs. It answers customers on your website, on WhatsApp and on phone calls, by text or by voice, in Hindi, Hinglish, English and other Indian languages. When it can't answer, a person from your team takes over.</p>
       <div class="facts">
-        <span><strong>2</strong> channels: website chat, WhatsApp</span>
+        <span><strong>3</strong> channels: website chat (typed or spoken), WhatsApp, phone calls</span>
         <span><strong>4</strong> AI providers: OpenAI-compatible, Anthropic, Sarvam, offline mock</span>
         <span><strong>4</strong> plans billed in INR through Razorpay</span>
-        <span><strong>159</strong> automated checks (38 unit, 121 end-to-end) plus a 32-question quality evaluation</span>
+        <span><strong>204</strong> automated checks (54 unit, 150 end-to-end) plus two quality evaluations (52 questions)</span>
       </div>
     </header>
 
@@ -225,11 +238,12 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <span class="eyebrow">At a glance</span>
         <h2>Feature map</h2>
       </div>
-      <p class="prose muted">Everything the product does today, and where to find it. Each agent (one assistant) has its own tabs in the dashboard: Sources, Q&amp;A, Playground, Settings, Embed, WhatsApp, Chats, Leads and Analytics.</p>
+      <p class="prose muted">Everything the product does today, and where to find it. Each agent (one assistant) has its own tabs in the dashboard: Sources, Q&amp;A, Playground, Settings, Embed, WhatsApp, Voice, Chats, Leads and Analytics.</p>
       <div class="legend">
         <span><span class="tag new">New</span> added in pull request #1</span>
         <span><span class="tag branch">New · PR #2</span> added in pull request #2 (both are merged into <code>main</code>)</span>
         <span><span class="tag pr3">New · PR #3</span> production AI work and the admin view (pull request #3)</span>
+        <span><span class="tag pr4">New · PR #4</span> structure-aware reading, deep admin analysis and voice agents (this branch)</span>
       </div>
       <div class="table-wrap">
         <table>
@@ -242,6 +256,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
             <tr><td class="area"></td><td>Allowed websites for the chat <span class="tag new">New</span></td><td>Embed tab</td></tr>
             <tr><td class="area"></td><td>WhatsApp: paste credentials, or Connect with Facebook</td><td>WhatsApp tab</td></tr>
             <tr><td class="area"></td><td>WhatsApp voice notes, transcribed <span class="tag branch">New · PR #2</span></td><td>Automatic with a Sarvam key</td></tr>
+            <tr><td class="area"></td><td>Voice agents: talk on the website, answer phone calls (Plivo, Exotel), barge-in, call transfer <span class="tag pr4">New · PR #4</span></td><td>Voice tab</td></tr>
             <tr><td class="area">Conversations</td><td>Inbox, human handoff, e-mail alerts</td><td>Chats tab</td></tr>
             <tr><td class="area"></td><td>👍 / 👎 on answers <span class="tag branch">New · PR #2</span></td><td>Website chat, Chats, Analytics</td></tr>
             <tr><td class="area"></td><td>Formatted answers (bold, lists, links) <span class="tag new">New</span></td><td>Website chat, Chats</td></tr>
@@ -253,7 +268,9 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
             <tr><td class="area"></td><td>Scanned PDFs, photos (OCR) and JavaScript websites <span class="tag pr3">New · PR #3</span></td><td>Sources tab, when set up</td></tr>
             <tr><td class="area"></td><td>Durable ingestion queue with retries <span class="tag pr3">New · PR #3</span></td><td>Sources tab (Retry on any failed source)</td></tr>
             <tr><td class="area"></td><td>Quality evaluation (<code>pnpm eval</code>) <span class="tag pr3">New · PR #3</span></td><td>Command line</td></tr>
+            <tr><td class="area"></td><td>Structure-aware reading: sections, tables, spreadsheet rows, PDF pages; weekly website refresh <span class="tag pr4">New · PR #4</span></td><td>Automatic; <b>Refresh now</b> in Sources</td></tr>
             <tr><td class="area">Operator</td><td>Admin app: accounts, AI cost, failures, answer traces, adding admins <span class="tag pr3">New · PR #3</span></td><td>admin app (port 3001)</td></tr>
+            <tr><td class="area"></td><td>Revenue and profit per account, funnel, cohorts, churn risk, topics, languages, agent health, alerts, plan/credit actions, audit log <span class="tag pr4">New · PR #4</span></td><td>admin app</td></tr>
             <tr><td class="area">Account</td><td>Sign up, log in, password reset by e-mail <span class="tag new">New</span></td><td>Login page</td></tr>
             <tr><td class="area"></td><td>Plans, message credits, Razorpay subscriptions</td><td>Plans &amp; billing</td></tr>
           </tbody>
@@ -306,6 +323,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
               <li>Sources are processed by a durable queue <span class="tag pr3">New · PR #3</span>: temporary errors (rate limits, timeouts) are retried automatically with backoff, and a server restart never loses work.</li>
               <li>Failed sources have a <b>Retry</b> button. Websites are read again; files and pasted text are processed again from the content kept when they were added.</li>
               <li>With OCR set up, scanned PDFs and photos (JPG, PNG) of price lists and menus can be added too. See <a href="#hard-sources">hard-to-read sources</a>.</li>
+              <li>Documents are read by their structure <span class="tag pr4">New · PR #4</span>: each passage stays inside one section and knows its heading ("Returns › Electronics"), table and spreadsheet rows keep their column names ("Our price: 480"), and PDFs keep page numbers, so answers can cite "page 4". See <a href="#chunking">reading documents</a>.</li>
+              <li>Websites are read again every week, and a ready website has <b>Refresh now</b> <span class="tag pr4">New · PR #4</span>. Unchanged pages cost nothing; if a refresh fails, the last good copy stays in use.</li>
               <li>Menus, footers and scripts are stripped from web pages. Hindi text is split at the danda (।), so sentences stay whole.</li>
               <li>Private or internal addresses (for example <code>localhost</code> or cloud metadata IPs) are refused.</li>
             </ul>
@@ -463,6 +482,34 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
           <li>It works whichever AI writes the answers. Set <code>VOICE_NOTES=off</code> to turn it off.</li>
         </ul>
       </article>
+    </section>
+
+    <!-- ================================================================ -->
+    <section id="voice-agents">
+      <div class="group-head">
+        <span class="eyebrow">Part 2b</span>
+        <h2>Voice agents <span class="tag pr4">New · PR #4</span></h2>
+      </div>
+      <p class="prose">Customers can <b>talk</b> to the assistant instead of typing: with the microphone button in the website chat, or by calling a phone number. It understands English, Hindi, Hinglish and 9 other Indian languages, answers from the same sources and Q&amp;A answers, and replies out loud in the caller's language, in one to three short sentences.</p>
+      <div class="cols">
+        <div>
+          <p class="label">How to use</p>
+          <ol class="steps">
+            <li>The platform runs the <b>voice gateway</b> and sets <code>VOICE_PUBLIC_URL</code> and a Sarvam key (<a href="#deploy">go-live</a>).</li>
+            <li>Open <b>Agent → Voice</b>. Turn on <b>Show a microphone button in the website chat</b>, pick a voice (for example Anushka or Karun) and the language to use when the caller's can't be detected, and optionally the first thing it says.</li>
+            <li>Phone calls: add the number to transfer to when a caller asks for a person. Copy the <b>Plivo Answer URL</b> into your Plivo application, or the <b>Exotel stream URL</b> into a Voicebot applet (with a Connect applet after it).</li>
+            <li>Visitors press the microphone, allow it, and just speak. What they said and the answers also appear in the chat.</li>
+          </ol>
+        </div>
+        <figure><img src="img/voice-widget.png" alt="The website chat in voice mode: a pulsing dot with 'Listening… just speak' and an End button" width="400" height="620" loading="lazy"><figcaption>Voice mode in the website chat.</figcaption></figure>
+      </div>
+      <ul class="notes">
+        <li><b>Fast</b>: the first sentence is spoken while the rest of the answer is still being written. The time from the end of the caller's sentence to the first audio is recorded for every answer (target: under 1.5 s with production models).</li>
+        <li><b>Interruptible</b>: when the caller talks over the answer, it stops at once and answers the new sentence.</li>
+        <li><b>Hand-off</b>: "let me talk to a person" (in any of the supported phrasings, including "insaan se baat karni hai") hands the conversation to the owner. On calls with a transfer number, the call is transferred; otherwise the owner gets the usual alert with the caller's number to call back.</li>
+        <li>Each spoken answer uses one message credit. Voice conversations show in Chats (channel <i>voice</i> or <i>phone</i>) and Analytics.</li>
+        <li>The phone addresses contain a secret; <b>Make new addresses</b> if one leaks. Full setup in <code>docs/voice.md</code>.</li>
+      </ul>
     </section>
 
     <!-- ================================================================ -->
@@ -672,6 +719,31 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <p class="muted small">Measured with <code>pnpm eval</code> using the offline mock models, whose embeddings only match shared words. Real embedding models score higher on paraphrases; run the evaluation with your production models for real numbers.</p>
       </article>
 
+      <article class="feature" id="chunking">
+        <h3>Reading documents by their structure <span class="tag pr4">New · PR #4</span></h3>
+        <div class="cols">
+          <ul class="notes">
+            <li>Sources become headings, paragraphs, lists and tables first. Passages never cross a section, and each remembers its heading path and PDF page, so citations say "Store policies › Returns › Electronics (page 4)".</li>
+            <li><b>Table and spreadsheet rows keep their column names</b>: a CSV row is stored as "Product: Atta 10kg · Code: AT-10 · MRP: 520 · Our price: 480", so "what's your price for AT-10?" finds the right number and not the MRP next to it.</li>
+            <li>PDF running headers and footers ("Page 3 of 12") are removed, and lines broken mid-sentence are joined.</li>
+            <li><b>Small to big</b>: small passages are searched (precise matches), and the model is given the whole section around them (complete rules, not half a policy), merged and within a budget per answer.</li>
+            <li><b>Incremental refresh</b>: every passage has a fingerprint, so re-reading a website re-embeds only what changed, and an unchanged page doesn't even invalidate cached answers.</li>
+          </ul>
+          <div class="table-wrap">
+            <table class="results">
+              <thead><tr><th>Store documents test set</th><th class="num">Before</th><th class="num">After</th></tr></thead>
+              <tbody>
+                <tr><td>Whole fact reached the model</td><td class="num">44%</td><td class="num up">100%</td></tr>
+                <tr><td>Top passage is only the right row/section</td><td class="num">0%</td><td class="num up">100%</td></tr>
+                <tr><td>Right passage found (hit@k)</td><td class="num">100%</td><td class="num">100%</td></tr>
+                <tr><td>Tokens per answer</td><td class="num">588</td><td class="num">676</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="muted small">20 questions over a return policy with per-category sections, a 30-row price spreadsheet, an FAQ and a warranty table (<code>eval/datasets/store-docs.json</code>), with the offline mock models. <code>CHUNKER=flat</code> switches back to the old fixed-size passages for comparison.</p>
+      </article>
+
       <article class="feature" id="cost">
         <h3>Cost controls</h3>
         <ul class="notes">
@@ -699,21 +771,49 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
     <section id="admin">
       <div class="group-head">
         <span class="eyebrow">Part 8 · for platform operators</span>
-        <h2>Admin view <span class="tag pr3">New · PR #3</span></h2>
+        <h2>Admin view <span class="tag pr3">New · PR #3</span> <span class="tag pr4">Deep analysis · PR #4</span></h2>
       </div>
-      <p class="prose">A separate admin app (port 3001 locally, its own address in production) with its own sign-in. The e-mails in <code>ADMIN_EMAILS</code> sign in with <code>ADMIN_PASSWORD</code> and can add more admins in the <b>Admins</b> tab. Pick today, 7, 30 or 90 days.</p>
+      <p class="prose">A separate admin app (port 3001 locally, its own address in production) with its own sign-in. The e-mails in <code>ADMIN_EMAILS</code> sign in with <code>ADMIN_PASSWORD</code> and can add more admins in the <b>Admins</b> tab. Pick today, 7, 30 or 90 days. Alerts that are firing show as a red banner on every tab.</p>
       <div class="cols">
         <ul class="notes">
           <li><b>Overview</b>: active, new and paying accounts; answers; failure rate; time to first word (average and p95); AI cost in total and per answer; helpful rate; charts of answers and cost per day.</li>
-          <li><b>Accounts</b>: every client's plan, credits used this month (red above 90%), agents, conversations, answers, failures, 👎 and AI cost. Open one to see its agents and latest AI calls.</li>
+          <li><b>Accounts</b>: every client's plan, credits used this month (red above 90%), agents, conversations, answers, failures, 👎 and AI cost. Open one for its agents, latest AI calls and the <a href="#admin-actions">actions</a>.</li>
           <li><b>Problems</b>: answers that failed, were cut off, needed retries or came from the backup model, with the error.</li>
-          <li><b>Models &amp; ingestion</b>: calls, failures, tokens, speed and cost per model; the ingestion queue and failed sources; embedding model status with <b>Re-index</b>.</li>
           <li><b>Answer trace</b>: for any answer, the question, what was searched for, the exact passages given to the model with their scores and how they were found, the model, attempts, timings, tokens and cost.</li>
         </ul>
         <figure><img src="img/admin-trace.png" alt="Answer trace panel showing result, model, attempts, timings, tokens, cost, the question, the answer and the passage given to the model" width="1320" height="1000" loading="lazy"><figcaption>An answer trace: this one needed 3 attempts after rate limits.</figcaption></figure>
       </div>
-      <figure><img src="img/admin-overview.png" alt="Admin overview with stat tiles for accounts, answers, failures, speed, cost and helpfulness, charts of answers and cost per day, and the top accounts table" width="1320" height="1466" loading="lazy"><figcaption>The admin overview with 30 days of example data.</figcaption></figure>
-      <p class="muted small">The admin view shows customers' questions and answers in traces. Keep the list of admins short and mention this in your privacy policy.</p>
+
+      <article class="feature" id="admin-business">
+        <h3>Business and growth <span class="tag pr4">New · PR #4</span></h3>
+        <ul class="notes">
+          <li><b>Business</b>: MRR and ARR from paid plans, paying and comped accounts, revenue per account, AI cost and gross margin over 30 days, revenue at risk (cancelling or failing renewals), new paid and churned. The plan mix with margin per plan, and <b>profit per account</b> (plan price minus AI cost), worst first, so accounts that cost more than they pay stand out.</li>
+          <li><b>Growth</b>: the signup funnel (signed up → created an agent → added knowledge → got a real conversation → paying), weekly cohorts (who is still getting conversations weeks later), <b>paying accounts at risk</b> with the reasons (cancelling, payment failing, no conversations for 10 days, usage halved, unanswered questions), and <b>upgrade candidates</b> about to run out of credits.</li>
+        </ul>
+        <figure><img src="img/admin-business.png" alt="Business tab: MRR, paying accounts, AI cost and margin, unprofitable accounts, revenue at risk; the plans table and profit per account" width="1320" height="1000" loading="lazy"><figcaption>The Business tab with 30 days of example data.</figcaption></figure>
+        <figure><img src="img/admin-growth.png" alt="Growth tab: signup funnel bars, weekly cohort retention table, paying accounts at risk and upgrade candidates" width="1320" height="1000" loading="lazy"><figcaption>Growth: funnel, cohorts, churn risk and upgrade candidates.</figcaption></figure>
+      </article>
+
+      <article class="feature" id="admin-quality">
+        <h3>Quality and operations <span class="tag pr4">New · PR #4</span></h3>
+        <ul class="notes">
+          <li><b>Quality</b>, across all agents: the languages customers write in (English, Hinglish, Hindi and 8 other Indian scripts), topics (prices, delivery, returns, order status, payment, hours…) and how often each goes unanswered, the most asked questions and the most common knowledge gaps, channels with hand-offs, busy hours by weekday (India time), and a 0–100 <b>health score</b> per agent with its problems ("40% of questions not in its sources", "2 sources failed to load").</li>
+          <li><b>Operations</b>: per day and provider, answers, failure rate, backup-model share and first-word p50/p95; answer-cache hit rate; time for new sources to be ready; then models, the ingestion queue and re-indexing.</li>
+          <li><b>Alerts</b> by e-mail to the admins, at most once an hour each: answers failing (over 5%), answers slow (p95 over 8 s), the backup model doing most of the work, ingestion stuck, many sources failing. Thresholds are settings.</li>
+        </ul>
+        <figure><img src="img/admin-quality.png" alt="Quality tab: questions analysed, knowledge gaps, top language and busiest hour; languages, channels and topics tables; most asked questions and knowledge gaps" width="1320" height="1400" loading="lazy"><figcaption>Quality: languages, channels, topics and the questions behind them.</figcaption></figure>
+      </article>
+
+      <article class="feature" id="admin-actions">
+        <h3>Actions and audit log <span class="tag pr4">New · PR #4</span></h3>
+        <ul class="notes">
+          <li><b>Change plan</b> (a trial, a partner, a goodwill upgrade), with a reason. Plans set by hand are <i>comped</i>: not counted as revenue, and the next Razorpay payment replaces them.</li>
+          <li><b>Grant credits</b> for this month (or take them back), with a reason.</li>
+          <li><b>Show conversations</b>: read an account's conversations, read-only, for support.</li>
+          <li>The <b>Audit log</b> records every change and every time an admin read a customer's conversations.</li>
+        </ul>
+      </article>
+      <p class="muted small">The admin view shows customers' questions and answers. Keep the list of admins short and mention this in your privacy policy.</p>
     </section>
 
     <!-- ================================================================ -->
@@ -747,15 +847,15 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
       </div>
       <ul class="checklist">
         <li><span>Run a long-lived Node server (<code>pnpm build &amp;&amp; pnpm start</code>, Docker or a VM) with Node 22.9+, pnpm 10+ and Postgres 15+ with pgvector. The ingestion workers run inside the app server; several servers can share the queue.</span></li>
-        <li><span>Run <code>pnpm migrate</code>. There are now 16 migrations, all safe on existing data (012 to 016 add AI call records, the ingestion queue, keyword search, search-query records and the answer cache).</span></li>
+        <li><span>Run <code>pnpm migrate</code>. There are now 20 migrations, all safe on existing data (017 to 020 add admins, structured passages, admin insights and the audit log, and voice settings).</span></li>
         <li><span>Set <code>AUTH_SECRET</code> and a separate <code>ENCRYPTION_KEY</code> (32+ random characters each), and back up the encryption key.</span></li>
         <li><span>Set <code>APP_URL</code> to the public <code>https://</code> address. That turns on secure cookies and is needed for WhatsApp and Razorpay webhooks.</span></li>
         <li><span>Choose real AI providers: <code>LLM_PROVIDER</code>, <code>LLM_MODEL</code>, keys and <code>EMBEDDING_PROVIDER=openai</code>. Then run <code>pnpm preflight --live</code>.</span></li>
         <li><span>Set <code>SMTP_URL</code> and <code>EMAIL_FROM</code>. Without them there are no password reset, handoff or new-lead e-mails.</span></li>
-        <li><span>Set <code>SARVAM_API_KEY</code> for voice notes (optional).</span></li>
+        <li><span>Set <code>SARVAM_API_KEY</code> for voice notes and voice agents (optional). For voice agents also run the voice gateway (<code>apps/voice</code>, port 3002) behind your https proxy and set <code>VOICE_PUBLIC_URL</code>; for Plivo transfers set <code>PLIVO_AUTH_ID</code> and <code>PLIVO_AUTH_TOKEN</code>.</span></li>
         <li><span>Billing: the Razorpay keys, webhook secret, and <code>pnpm razorpay:setup</code> for the plan IDs. WhatsApp: the Meta app values for Connect with Facebook.</span></li>
         <li><span>Tune <code>RETRIEVAL_MIN_SCORE</code> (start near 0.25 with real embeddings) and <code>ANSWER_FIX_MIN_SCORE</code> (0.5) on your own customers' questions.</span></li>
-        <li><span>Set <code>ADMIN_EMAILS</code>, <code>ADMIN_PASSWORD</code> and <code>ADMIN_URL</code> for the admin app, and <code>LLM_PRICES</code> (plus <code>EMBEDDING_PRICE_PER_MTOK</code>, optionally <code>USD_INR_RATE</code>) from your providers' current price lists.</span></li>
+        <li><span>Set <code>ADMIN_EMAILS</code>, <code>ADMIN_PASSWORD</code> and <code>ADMIN_URL</code> for the admin app, and <code>LLM_PRICES</code> (plus <code>EMBEDDING_PRICE_PER_MTOK</code> and <code>USD_INR_RATE</code> for profit figures) from your providers' current price lists. Alert e-mails go to the admins through <code>SMTP_URL</code>.</span></li>
         <li><span>Add a backup model (<code>LLM_FALLBACK_PROVIDER</code> / <code>LLM_FALLBACK_MODEL</code>) from a different provider, and optionally a small model for small talk.</span></li>
         <li><span>Optional: <code>OCR_PROVIDER</code> + <code>OCR_MODEL</code> for scanned PDFs and photos, and <code>PRERENDER_URL</code> for JavaScript-built websites.</span></li>
         <li><span>Run <code>pnpm eval -- --save-baseline</code> with your production models, then <code>pnpm eval -- --check</code> before every prompt, search or model change.</span></li>
@@ -769,13 +869,13 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <span class="eyebrow">Quality</span>
         <h2>Testing</h2>
       </div>
-      <p class="prose">Every suite below passed on 29 September 2026, run against a local Postgres with pgvector, the offline mock models (with injected failures), and fake Meta, Razorpay, SMTP, Sarvam, vision and rendering servers. The screenshots in this guide come from the same setup, which is why answers start with "(mock model)".</p>
+      <p class="prose">Every suite below passed on 30 September 2026, run against a local Postgres with pgvector, the offline mock models (with injected failures), and fake Meta, Razorpay, SMTP, Sarvam (speech in both directions), Plivo, vision and rendering servers. The screenshots in this guide come from the same setup, which is why answers start with "(mock model)".</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Command</th><th>Covers</th><th class="num">Checks</th></tr></thead>
           <tbody>
-            <tr><td><code>pnpm test</code></td><td>Chunking, WhatsApp formatting, encryption, handoff phrases, Markdown, allowed websites, phone/e-mail/CSV, retries and timeouts, history trimming, pricing, keyword search and fusion, duplicates, reranking, cache keys, routing, scan detection, evaluation scoring</td><td class="num">38</td></tr>
-            <tr><td><code>pnpm smoke:ai</code></td><td>Retries, timeouts, backup model, ingestion queue and crash recovery, answer cache, routing, OCR, JavaScript sites, admin view, answer traces, re-indexing</td><td class="num">17</td></tr>
+            <tr><td><code>pnpm test</code></td><td>Chunking and document structure (sections, tables, CSV, PDF pages, HTML), context building, WhatsApp formatting, encryption, handoff phrases, Markdown, allowed websites, phone/e-mail/CSV, retries and timeouts, history trimming, pricing, keyword search and fusion, duplicates, reranking, cache keys, routing, scan detection, evaluation scoring, languages and topics, agent health and churn risk, audio, speech detection, spoken sentences, voice tickets</td><td class="num">54</td></tr>
+            <tr><td><code>pnpm smoke:ai</code></td><td>Retries, timeouts, backup model, ingestion queue and crash recovery, answer cache, routing, OCR, JavaScript sites, structured websites/CSV/PDF pages, website refresh, admin view, answer traces, re-indexing</td><td class="num">22</td></tr>
             <tr><td><code>pnpm smoke</code></td><td>Accounts, ingestion, answers, isolation, widget, rate limits</td><td class="num">17</td></tr>
             <tr><td><code>pnpm smoke:features</code></td><td>Feedback, Q&amp;A answers, analytics, leads, CSV</td><td class="num">12</td></tr>
             <tr><td><code>pnpm smoke:account</code></td><td>Password reset, allowed websites</td><td class="num">9</td></tr>
@@ -784,7 +884,10 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
             <tr><td><code>pnpm smoke:embedded</code></td><td>Connect with Facebook flow</td><td class="num">13</td></tr>
             <tr><td><code>pnpm smoke:billing</code></td><td>Razorpay checkout, webhooks, cancel</td><td class="num">15</td></tr>
             <tr><td><code>pnpm smoke:sarvam</code></td><td>Sarvam chat provider</td><td class="num">4</td></tr>
-            <tr><td><code>pnpm eval</code></td><td>Answer quality on a 32-question dataset (scores, not pass/fail; <code>--check</code> gates regressions)</td><td class="num">–</td></tr>
+            <tr><td><code>pnpm smoke:admin</code></td><td>Admin sign-in, adding and removing admins, passwords, separate sessions</td><td class="num">10</td></tr>
+            <tr><td><code>pnpm smoke:insights</code></td><td>Revenue and profit, funnel, cohorts, churn risk, languages, topics, agent health, alerts, comped plans, credits, read-only conversations, audit log</td><td class="num">7</td></tr>
+            <tr><td><code>pnpm smoke:voice</code></td><td>Website voice, Plivo and Exotel calls, first-audio latency, barge-in, handoff and transfer</td><td class="num">7</td></tr>
+            <tr><td><code>pnpm eval</code></td><td>Answer quality on a 32-question shop dataset and a 20-question structured-documents dataset (scores, not pass/fail; <code>--check</code> gates regressions)</td><td class="num">–</td></tr>
           </tbody>
         </table>
       </div>
@@ -804,6 +907,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
             <li>The visitor IP is taken from <code>X-Forwarded-For</code>, which is only safe behind your own proxy.</li>
             <li>Connect with Facebook and voice notes were tested against fake Meta and Sarvam servers, not live accounts. Test with your own number first.</li>
             <li>Sarvam's instant speech-to-text takes clips under about 30 seconds. Longer voice notes get a "please type" reply.</li>
+            <li>Voice agents were tested against fake Sarvam, Plivo and Exotel servers that follow their documented formats, not live calls. Make a test call on your own number first; latency depends on your models and region.</li>
+            <li>Voice sessions live in the gateway process that took the call, so restarting it ends calls in progress.</li>
             <li>The assistant doesn't read WhatsApp images. The inbox lists 100 conversations, with no search.</li>
             <li>The reranker, follow-up rewriting, OCR and page rendering were tested against fake services only, and the quality numbers come from mock models. Run <code>pnpm eval</code> with real models before switching the optional steps on.</li>
           </ul>
@@ -812,7 +917,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
           <p class="label">Suggested next features</p>
           <ul class="notes">
             <li><b>Team members</b> who can reply from the inbox without the owner's login.</li>
-            <li><b>Automatic website re-sync</b> (weekly), so answers follow price changes.</li>
+            <li><b>Streaming speech</b> (Sarvam's streaming speech-to-text and text-to-speech) to shave a few hundred milliseconds more off voice replies.</li>
+            <li><b>Outbound calls</b>: call back leads and remind customers, with the same voice agent.</li>
             <li><b>Actions</b>: order status from Shopify or WooCommerce, appointment booking, UPI payment links.</li>
             <li><b>WhatsApp templates</b>, for replies after 24 hours and opt-in offers.</li>
             <li><b>Credit top-ups</b>, GST invoices, and data export and deletion for India's DPDP Act.</li>
@@ -822,7 +928,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
     </section>
 
     <footer>
-      Chatbase India · repository <code>venu005/chatbase-mvp</code> · guide updated 29 September 2026 from the code on <code>main</code> plus pull request #3. The source of this page is <code>docs/guide/index.html</code>.
+      Chatbase India · repository <code>venu005/chatbase-mvp</code> · guide updated 30 September 2026 from the code on <code>main</code> plus this branch (structure-aware reading, admin analysis, voice agents). The source of this page is <code>docs/guide/index.html</code>.
     </footer>
   </main>
 </div>

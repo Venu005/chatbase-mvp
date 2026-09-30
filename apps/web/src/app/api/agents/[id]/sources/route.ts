@@ -22,7 +22,7 @@ export const GET = handle<Ctx>(async (_req, { params }) => {
   const agent = await ownAgent(user.id, (await params).id);
   const acceptsImages = ocrConfigured();
   const sources = await q(
-    `SELECT s.id, s.type, s.title, s.url, s.status, s.error, s.char_count, s.chunk_count, s.created_at,
+    `SELECT s.id, s.type, s.title, s.url, s.status, s.error, s.char_count, s.chunk_count, s.created_at, s.last_synced_at,
             (s.type = 'url' OR EXISTS (SELECT 1 FROM source_payloads p WHERE p.source_id = s.id AND (p.docs IS NOT NULL OR p.file IS NOT NULL))) AS retryable
        FROM sources s WHERE s.agent_id = $1 ORDER BY s.created_at DESC`,
     [agent.id]

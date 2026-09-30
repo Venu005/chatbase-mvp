@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Markdown from "./Markdown";
+import { VoiceClient, type VoiceServerEvent } from "@/lib/voice-client";
 
 type Citation = { n: number; title: string; url: string | null };
 type Rating = "up" | "down" | null;
@@ -92,6 +93,7 @@ export default function ChatBox({
   channel = "widget",
   handoffEnabled = false,
   lead,
+  voice = false,
 }: {
   agentId: string;
   welcome: string;
@@ -101,6 +103,8 @@ export default function ChatBox({
   handoffEnabled?: boolean;
   /** Ask the visitor for their details (website widget only). */
   lead?: LeadConfig;
+  /** Show the microphone button (voice mode) - the agent has voice turned on and a voice gateway is configured. */
+  voice?: boolean;
 }) {
   const storageKey = `cb_session_${channel}_${agentId}`;
   const [sessionId, setSessionId] = useState("");
@@ -117,6 +121,8 @@ export default function ChatBox({
   const [leadSkipped, setLeadSkipped] = useState(false);
   const skipKey = `cb_lead_skip_${agentId}`;
   const endRef = useRef<HTMLDivElement>(null);
+  const [voiceState, setVoiceState] = useState<"off" | "connecting" | "listening" | "thinking" | "speaking">("off");
+  const voiceRef = useRef<VoiceClient | null>(null);
   const lastHuman = useRef(0); // highest owner-message id already shown
 
   useEffect(() => {
@@ -252,6 +258,44 @@ export default function ChatBox({
 
   const patchLast = (fn: (m: Msg) => Msg) => setMessages((ms) => ms.map((m, i) => (i === ms.length - 1 ? fn(m) : m)));
 
+  // ---- voice mode: talk instead of typing; what was said and answered also appears in the chat
+  function onVoice(e: VoiceServerEvent) {
+    if (e.type === "ready") setVoiceState("listening");
+    else if (e.type === "state") setVoiceState(e.state);
+    else if (e.type === "transcript") setMessages((ms) => [...ms, { role: "user", content: e.text }]);
+    else if (e.type === "reply") setMessages((ms) => [...ms, { role: "assistant", content: e.text }]);
+    else if (e.type === "handoff") {
+      setMode("human");
+      if (e.notice) setMessages((ms) => [...ms, { role: "assistant", content: e.notice! }]);
+      stopVoice();
+    } else if (e.type === "error") setNotice(e.message);
+  }
+  async function startVoice() {
+    if (!sessionId || voiceRef.current) return;
+    setNotice("");
+    setVoiceState("connecting");
+    const client = new VoiceClient(onVoice, (reason) => {
+      voiceRef.current = null;
+      setVoiceState("off");
+      if (reason) setNotice(reason);
+    });
+    voiceRef.current = client;
+    try {
+      await client.start(agentId, sessionId);
+    } catch (err) {
+      client.stop();
+      voiceRef.current = null;
+      setVoiceState("off");
+      setNotice((err as Error).name === "NotAllowedError" ? "Allow the microphone to talk to the assistant." : (err as Error).message);
+    }
+  }
+  function stopVoice() {
+    voiceRef.current?.stop();
+    voiceRef.current = null;
+    setVoiceState("off");
+  }
+  useEffect(() => () => voiceRef.current?.stop(), []);
+
   async function send(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
@@ -365,8 +409,25 @@ export default function ChatBox({
       {gate && lead && leadDone === false && sessionId && (
         <LeadForm agentId={agentId} sessionId={sessionId} config={lead} color={color} onDone={() => setLeadDone(true)} />
       )}
-      {!gate && <form className="chat-input" onSubmit={send}>
+      {!gate && voiceState !== "off" && (
+        <div className="voice-bar" role="status">
+          <span className={`voice-dot ${voiceState}`} style={{ background: color }} aria-hidden />
+          <span>
+            {voiceState === "connecting" ? "Connecting…" : voiceState === "listening" ? "Listening… just speak" : voiceState === "thinking" ? "Thinking…" : "Speaking… (talk to interrupt)"}
+          </span>
+          <button type="button" className="btn ghost" onClick={stopVoice}>End</button>
+        </div>
+      )}
+      {!gate && voiceState === "off" && <form className="chat-input" onSubmit={send}>
         <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={mode === "human" ? "Message our team…" : "Type your question…"} maxLength={2000} aria-label="Message" />
+        {voice && mode === "bot" && (
+          <button type="button" className="mic-btn" aria-label="Talk to the assistant" title="Talk to the assistant" onClick={startVoice} disabled={!sessionId}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+            </svg>
+          </button>
+        )}
         <button type="submit" disabled={busy || !input.trim()} style={{ background: color }}>
           Send
         </button>
