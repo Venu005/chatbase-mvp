@@ -1,16 +1,27 @@
 import dns from "node:dns/promises";
 import net from "node:net";
 import * as cheerio from "cheerio";
-import { extractText, getDocumentProxy } from "unpdf";
-import { toVector, tx } from "./db";
+import { getDocumentProxy } from "unpdf";
+import { createHash } from "node:crypto";
+import { q, toVector, tx } from "./db";
 import { chunkText, normalizeText } from "./chunk";
+import { chunkBlocks, pagesToBlocks, textToBlocks, type Block } from "./structure";
+import { htmlToBlocks } from "./html-blocks";
 import { looksClientRendered } from "./content-checks";
 export { looksScanned } from "./content-checks";
 import { env, envNum } from "./env";
 import { embedAll, embeddingModelId, getEmbedder } from "./providers";
 import { recordIngest } from "./ai-log";
 
-export type Doc = { title: string; url: string | null; text: string };
+/** One document of a source. `blocks` keeps its structure (headings, lists, tables, pages); without it `text` is parsed. */
+export type Doc = { title: string; url: string | null; text: string; blocks?: Block[] };
+
+/** Plain text of blocks (for size checks and scan/JS detection). */
+export function blocksText(blocks: Block[]): string {
+  return blocks
+    .map((b) => (b.kind === "list" ? b.items.join("\n") : b.kind === "table" ? [b.header, ...b.rows].map((r) => r.join(" ")).join("\n") : b.text))
+    .join("\n");
+}
 
 const MAX_BYTES = 3 * 1024 * 1024;
 const MAX_REDIRECTS = 4;
@@ -116,24 +127,36 @@ export function htmlToDoc(html: string, pageUrl: URL): { doc: Doc; links: string
       /* ignore bad hrefs */
     }
   });
-  const title = normalizeText($("title").first().text()) || pageUrl.href;
-  $("script,style,noscript,svg,iframe,nav,footer,header,form,aside,template").remove();
-  $("br").replaceWith("\n");
-  $("p,div,li,h1,h2,h3,h4,h5,h6,tr,section,article,blockquote,pre").each((_, el) => {
-    $(el).append("\n");
-  });
-  const root = $("main").length ? $("main") : $("article").length ? $("article") : $("body");
-  return { doc: { title, url: pageUrl.href, text: normalizeText(root.text()) }, links: [...links] };
+  const { title, blocks } = htmlToBlocks(html);
+  return { doc: { title: title || pageUrl.href, url: pageUrl.href, text: blocksText(blocks), blocks }, links: [...links] };
 }
 
 export async function pdfToText(buf: Uint8Array): Promise<string> {
   return (await pdfText(buf)).text;
 }
 
-export async function pdfText(buf: Uint8Array): Promise<{ text: string; pages: number }> {
+/** A PDF's text, page by page as blocks (page numbers kept, running headers and footers dropped). */
+export async function pdfText(buf: Uint8Array): Promise<{ text: string; pages: number; blocks: Block[] }> {
   const pdf = await getDocumentProxy(new Uint8Array(buf));
-  const { text, totalPages } = await extractText(pdf, { mergePages: true });
-  return { text: normalizeText(Array.isArray(text) ? text.join("\n\n") : text), pages: totalPages };
+  const pages: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) pages.push(pageLines((await (await pdf.getPage(i)).getTextContent()).items));
+  const blocks = pagesToBlocks(pages);
+  return { text: normalizeText(pages.join("\n\n")), pages: pdf.numPages, blocks };
+}
+
+/** A page's text items → lines: a new line wherever the PDF ends one or the text moves to another baseline. */
+function pageLines(items: unknown[]): string {
+  let out = "";
+  let lastY: number | null = null;
+  for (const it of items as { str?: string; hasEOL?: boolean; transform?: number[]; height?: number }[]) {
+    if (typeof it.str !== "string") continue;
+    const y = it.transform?.[5] ?? null;
+    if (lastY !== null && y !== null && Math.abs(y - lastY) > Math.max(2, (it.height ?? 10) * 0.5) && !out.endsWith("\n")) out += "\n";
+    out += it.str;
+    if (it.hasEOL) out += "\n";
+    if (it.str) lastY = y;
+  }
+  return out;
 }
 
 /** Fetches a page through the rendering service (PRERENDER_URL with {url}), which runs its JavaScript. */
@@ -155,7 +178,8 @@ export async function fetchDocs(startUrl: string, maxPages: number): Promise<Doc
     try {
       const { url, contentType, body } = await safeFetch(next);
       if (contentType.includes("application/pdf")) {
-        docs.push({ title: url.pathname.split("/").pop() || url.href, url: url.href, text: await pdfToText(body) });
+        const pdf = await pdfText(body);
+        docs.push({ title: url.pathname.split("/").pop() || url.href, url: url.href, text: pdf.text, blocks: pdf.blocks });
       } else if (contentType.includes("html")) {
         const html = body.toString("utf8");
         let { doc, links } = htmlToDoc(html, url);
@@ -169,7 +193,8 @@ export async function fetchDocs(startUrl: string, maxPages: number): Promise<Doc
         if (doc.text.length > 30) docs.push(doc);
         for (const l of links) if (!seen.has(l) && seen.size < limit * 10) (seen.add(l), queue.push(l));
       } else if (contentType.startsWith("text/")) {
-        docs.push({ title: url.href, url: url.href, text: normalizeText(body.toString("utf8")) });
+        const text = normalizeText(body.toString("utf8"));
+        docs.push({ title: url.href, url: url.href, text, blocks: textToBlocks(text) });
       } else {
         throw new Error(`Unsupported content type: ${contentType || "unknown"}`);
       }
@@ -186,46 +211,94 @@ export async function fetchDocs(startUrl: string, maxPages: number): Promise<Doc
 // Chunk -> embed -> store (one transaction, so a retried job never leaves duplicates or half a source).
 // Throws on failure; the ingestion queue decides whether to retry.
 // ---------------------------------------------------------------------------
-export async function writeChunks(sourceId: string, agentId: string, docs: Doc[]): Promise<{ chars: number; chunks: number }> {
-  const pieces: { title: string; url: string | null; content: string }[] = [];
+export type WriteResult = { chars: number; chunks: number; embedded: number; reused: number; changed: boolean };
+
+/**
+ * Structure-aware chunking → embedding → storage, in one transaction. Passages whose embedded text is unchanged since
+ * the last run reuse their stored vector (by content hash), so re-syncing a website only pays for what changed; when
+ * nothing changed at all the stored passages are left alone.
+ */
+export async function writeChunks(sourceId: string, agentId: string, docs: Doc[]): Promise<WriteResult> {
+  const maxTokens = envNum("CHUNK_TOKENS", 180);
+  const contextTokens = envNum("CONTEXT_TOKENS", 600);
+  const model = embeddingModelId();
+  const pieces: { title: string; url: string | null; content: string; headingPath: string; page: number | null; context: string; embedText: string; hash: string }[] = [];
   let chars = 0;
   for (const d of docs) {
     chars += d.text.length;
-    for (const content of chunkText(d.text, envNum("CHUNK_SIZE", 900), envNum("CHUNK_OVERLAP", 120))) pieces.push({ title: d.title, url: d.url, content });
+    // CHUNKER=flat: the previous fixed-size splitter (for comparisons with pnpm eval, or as an emergency switch).
+    const chunks =
+      env("CHUNKER")?.toLowerCase() === "flat"
+        ? chunkText(d.text, envNum("CHUNK_SIZE", 900), envNum("CHUNK_OVERLAP", 120)).map((content) => ({ content, headingPath: [] as string[], page: null, context: content }))
+        : chunkBlocks(d.blocks ?? textToBlocks(d.text), { maxTokens, contextTokens });
+    for (const c of chunks) {
+      const headingPath = c.headingPath.join(" › ");
+      // Embedded with where it lives, so "₹265" still carries "Price list › Atta".
+      const embedText = [d.title, headingPath].filter(Boolean).join(" › ") + "\n" + c.content;
+      const hash = createHash("sha256").update(`${model}\n${embedText}`).digest("hex").slice(0, 32);
+      pieces.push({ title: d.title, url: d.url, content: c.content, headingPath, page: c.page, context: c.context, embedText, hash });
+    }
   }
   if (!pieces.length) throw new PermanentIngestError("No readable text found in this source");
-  if (pieces.length > 5000) throw new PermanentIngestError("Source is too large (more than 5,000 chunks)");
+  if (pieces.length > 5000) throw new PermanentIngestError("Source is too large (more than 5,000 passages)");
 
+  // Reuse vectors of passages whose embedded text (and model) haven't changed.
+  const existing = new Map(
+    (
+      await q<{ content_hash: string; embedding: string; context: string | null; page_url: string | null; heading_path: string; page: number | null }>(
+        "SELECT content_hash, embedding::text AS embedding, context, page_url, heading_path, page FROM chunks WHERE source_id = $1 AND embedding_model = $2 AND content_hash IS NOT NULL",
+        [sourceId, model]
+      )
+    ).map((r) => [r.content_hash, r])
+  );
+  const unchanged =
+    existing.size === pieces.length &&
+    pieces.every((p) => {
+      const e = existing.get(p.hash);
+      // A NULL context means "the passage itself" (the hash already guarantees the passage is the same).
+      return e && (e.context ?? p.content) === p.context && e.page_url === p.url && e.heading_path === p.headingPath && e.page === p.page;
+    });
+  if (unchanged) return { chars, chunks: pieces.length, embedded: 0, reused: pieces.length, changed: false };
+
+  const todo = pieces.filter((p) => !existing.has(p.hash));
   const embedder = getEmbedder();
-  const model = embeddingModelId();
-  const embedChars = pieces.reduce((n, p) => n + p.content.length, 0);
+  const embedChars = todo.reduce((n, p) => n + p.embedText.length, 0);
   const t0 = Date.now();
-  let vectors: number[][];
-  try {
-    // Each passage is embedded with its page/source title, so a passage that never repeats its topic ("₹265") still
-    // carries it ("Price list"). The stored content stays as it was.
-    vectors = await embedAll(pieces.map((p) => (p.title ? `${p.title}\n${p.content}` : p.content)));
-  } catch (e) {
-    await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "error", error: (e as Error).message });
-    throw e;
+  let fresh: number[][] = [];
+  if (todo.length) {
+    try {
+      fresh = await embedAll(todo.map((p) => p.embedText));
+    } catch (e) {
+      await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "error", error: (e as Error).message });
+      throw e;
+    }
+    await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "ok" });
   }
-  await recordIngest({ agentId, provider: embedder.name, model: embedder.model, chars: embedChars, ms: Date.now() - t0, status: "ok" });
+  const vectorOf = new Map<string, string>();
+  todo.forEach((p, i) => vectorOf.set(p.hash, toVector(fresh[i])));
+  for (const [h, e] of existing) if (!vectorOf.has(h)) vectorOf.set(h, e.embedding);
 
   await tx(async (query) => {
     await query("DELETE FROM chunks WHERE source_id = $1", [sourceId]);
     const BATCH = 100;
+    const COLS = 11;
     for (let i = 0; i < pieces.length; i += BATCH) {
       const slice = pieces.slice(i, i + BATCH);
       const params: unknown[] = [];
       const values = slice.map((p, j) => {
-        const o = j * 7;
-        params.push(sourceId, agentId, p.title, p.url, p.content, toVector(vectors[i + j]), model);
-        return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6}::vector,$${o + 7})`;
+        const o = j * COLS;
+        params.push(sourceId, agentId, p.title, p.url, p.content, vectorOf.get(p.hash), model, p.headingPath, p.page, p.context === p.content ? null : p.context, p.hash);
+        return `(${Array.from({ length: COLS }, (_, k) => `$${o + k + 1}${k === 5 ? "::vector" : ""}`).join(",")})`;
       });
-      await query(`INSERT INTO chunks (source_id, agent_id, page_title, page_url, content, embedding, embedding_model) VALUES ${values.join(",")}`, params);
+      await query(
+        `INSERT INTO chunks (source_id, agent_id, page_title, page_url, content, embedding, embedding_model, heading_path, page, context, content_hash) VALUES ${values.join(",")}`,
+        params
+      );
     }
+    // Moves the agent's knowledge version (trigger), which invalidates cached answers.
+    await query("UPDATE sources SET content_version = content_version + 1 WHERE id = $1", [sourceId]);
   });
-  return { chars, chunks: pieces.length };
+  return { chars, chunks: pieces.length, embedded: todo.length, reused: pieces.length - todo.length, changed: true };
 }
 
 /** An ingestion failure that retrying can't fix (a 404 page, an empty file...). */

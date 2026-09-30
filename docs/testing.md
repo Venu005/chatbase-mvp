@@ -36,7 +36,8 @@ pnpm start
 
 # terminal 2
 pnpm smoke             # accounts, ingestion, RAG answers, isolation, limits, widget, rate limits
-pnpm smoke:ai          # AI pipeline: retries, timeouts, backup model, usage and cost records, admin view
+pnpm smoke:ai          # AI pipeline: retries, timeouts, backup model, structured chunking (sites, CSV, PDF pages),
+                       # website refresh, usage and cost records, admin view
 pnpm smoke:admin       # admin app: sign-in, adding and removing admins, password changes, separate sessions
 pnpm smoke:features    # 👍/👎 feedback, Q&A answers, analytics, lead capture and CSV
 pnpm smoke:account     # password reset e-mails and links, allowed websites for the widget
@@ -62,6 +63,7 @@ pnpm eval -- --save-baseline         # remember these scores for this dataset + 
 pnpm eval -- --check                 # exit 1 if any rate is >5 points below the baseline (use in CI)
 pnpm eval -- --judge                 # also grade groundedness with EVAL_JUDGE_PROVIDER / EVAL_JUDGE_MODEL
 pnpm eval -- --only sku,hinglish     # only some categories (or question ids)
+pnpm eval -- --dataset eval/datasets/store-docs.json   # structured documents: sections, a price CSV, an FAQ, a table
 ```
 
 | Score | Meaning |
@@ -71,6 +73,8 @@ pnpm eval -- --only sku,hinglish     # only some categories (or question ids)
 | refuse | For questions the sources don't cover, the assistant says it doesn't know instead of inventing |
 | lang | The reply uses the customer's script (Devanagari for Hindi, Latin for English and Hinglish) |
 | grounded | (`--judge`) A grader model found no claims the passages don't support |
+| context | The whole fact the answer needs (for example a full policy section) reached the model |
+| precise | The top passage holds only the right section or row, not its neighbours (for example not the next product's price) |
 
 Results are printed by category (direct, paraphrase, product code, product, follow-up, Hinglish, Hindi, out of scope) and
 saved to `eval/results/`. Baselines live in `eval/baselines/`, one per dataset and model combination. **Only numbers from real
@@ -92,6 +96,21 @@ so you can compare setups side by side:
 
 For Hindi and Hinglish customers, look at the `hindi` and `hinglish` rows specifically: English-only embedding models
 often do well overall and poorly there.
+
+### Store documents dataset, mock models
+
+`eval/datasets/store-docs.json` has a return policy with per-category sections, a 30-row price spreadsheet, an FAQ and a
+warranty table. Old fixed-size chunks against the structure-aware chunker (`CHUNKER=flat` vs the default):
+
+| Chunker | hit@k | top-1 | context | precise | answer* | tokens/answer |
+| --- | --- | --- | --- | --- | --- | --- |
+| Flat, 900 characters | 100% | 83% | 44% | 0% | 44% | 588 |
+| Structured (current) | 100% | 78% | 100% | 100% | 39% | 676 |
+
+With flat chunks a price row sat in a passage with a dozen other rows and policy sections were cut mid-way, so the model
+often didn't see the whole rule (context 44%) or saw the wrong product's price next to the right one (precise 0%). The
+small top-1 dip is in the `sections` category, where the mock embeddings match only shared words (sofa → Furniture);
+real embedding models don't have that problem.
 
 ### Kirana dataset, mock models
 

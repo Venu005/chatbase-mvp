@@ -23,7 +23,7 @@ type Agent = {
   lead_fields: ("name" | "email" | "phone")[];
   lead_message: string;
 };
-type Source = { id: string; type: string; title: string; url: string | null; status: "processing" | "ready" | "failed"; error: string | null; char_count: number; chunk_count: number; retryable: boolean };
+type Source = { id: string; type: string; title: string; url: string | null; status: "processing" | "ready" | "failed"; error: string | null; char_count: number; chunk_count: number; retryable: boolean; last_synced_at: string | null };
 type Convo = {
   id: string;
   channel: string;
@@ -252,12 +252,16 @@ function SourcesTab({ agentId }: { agentId: string }) {
               <div className="muted small">
                 {s.type.toUpperCase()}
                 {s.status === "ready" && ` · ${s.chunk_count} passages`}
+                {s.status === "ready" && s.type === "url" && s.last_synced_at && ` · read ${new Date(s.last_synced_at).toLocaleDateString("en-IN")}, refreshed weekly`}
                 {(s.status === "failed" || s.status === "processing") && s.error && ` · ${s.error}`}
               </div>
             </div>
             <span className={`badge ${s.status}`}>{s.status}</span>
             {s.status === "failed" && s.retryable && (
               <button className="link-btn" onClick={() => retry(s.id)}>Retry</button>
+            )}
+            {s.status === "ready" && s.type === "url" && (
+              <button className="link-btn" onClick={() => retry(s.id)}>Refresh now</button>
             )}
             <button className="link-btn" onClick={() => remove(s.id)}>Remove</button>
           </li>

@@ -20,6 +20,8 @@ import { looksClientRendered, looksScanned } from "../src/content-checks.ts";
 import http from "node:http";
 import { parseInline, parseMarkdown } from "../src/markdown.ts";
 import { embedAllowed, hostAllowed, normalizeDomain } from "../src/domains.ts";
+import { chunkBlocks, csvToBlocks, groupContext, pagesToBlocks, parseCsv, rowText, textToBlocks, tokens } from "../src/structure.ts";
+import { htmlToBlocks } from "../src/html-blocks.ts";
 import { csvCell, normalizeEmail, normalizePhone, parseContact, toCsv } from "../src/leads.ts";
 
 process.env.AUTH_SECRET ??= "unit-test-secret-unit-test-secret-1234";
@@ -436,4 +438,98 @@ test("content checks: scanned PDFs and JavaScript app shells are recognised", ()
   assert.ok(looksClientRendered("<noscript>Please enable JavaScript</noscript><script></script>", 40));
   assert.ok(!looksClientRendered("<main>" + "Real text. ".repeat(40) + "</main><script></script>", 440), "plenty of text: fine as is");
   assert.ok(!looksClientRendered("<p>Short page</p>", 10), "no scripts: not an app shell");
+});
+
+// ---- structure-aware chunking -------------------------------------------------------------------------------
+test("tokens: Indic scripts cost more tokens per character than Latin", () => {
+  assert.equal(tokens("abcdefgh"), 2);
+  assert.equal(tokens("डिलीवरी"), 4);
+  assert.ok(tokens("हम दो घंटे में डिलीवरी करते हैं") > tokens("We deliver in two hours time"));
+});
+
+test("textToBlocks: Markdown headings, FAQ labels, lists and pipe tables", () => {
+  const b = textToBlocks("# Policies\n\nReturns:\nUnopened items within 7 days.\n\n- UPI\n- Cards\n\n| Item | Price |\n|---|---|\n| Atta 5 kg | ₹265 |\n| Rice | ₹189 |");
+  assert.deepEqual(b.map((x) => x.kind), ["heading", "heading", "text", "list", "table"]);
+  assert.deepEqual([b[0].level, b[1].level, b[1].text], [1, 3, "Returns"]);
+  assert.deepEqual(b[3].items, ["UPI", "Cards"]);
+  assert.deepEqual(b[4].header, ["Item", "Price"]);
+  assert.deepEqual(b[4].rows[1], ["Rice", "₹189"]);
+  assert.equal(textToBlocks("Delivery charges: free above ₹300.")[0].kind, "text", "a sentence with a colon isn't a heading");
+});
+
+test("parseCsv / csvToBlocks: quotes, commas and newlines inside quotes, other separators; rows keep column names", () => {
+  assert.deepEqual(parseCsv('Name,Price\n"Atta, 5 kg",265\n"Say ""hi""",1\n'), [["Name", "Price"], ["Atta, 5 kg", "265"], ['Say "hi"', "1"]]);
+  assert.deepEqual(parseCsv("a;b\n1;2"), [["a", "b"], ["1", "2"]]);
+  const t = csvToBlocks("Product,Code,Price\nAtta 5 kg,AA-5K,265\n");
+  assert.equal(rowText(t[0].header, t[0].rows[0]), "Product: Atta 5 kg · Code: AA-5K · Price: 265");
+});
+
+test("pagesToBlocks: page numbers kept, running headers/footers dropped, broken lines joined", () => {
+  const page = (n, body) => `Sharma Kirana Menu\n${body}\nPage ${n} of 4`;
+  const b = pagesToBlocks([page(1, "Masala dosa ₹80"), page(2, "Idli ₹40\nserved with chutney"), page(3, "Vada ₹30"), page(4, "Coffee ₹25")]);
+  const texts = b.map((x) => x.text).join(" | ");
+  assert.ok(!/Sharma Kirana Menu|Page \d/.test(texts), texts);
+  assert.ok(b.some((x) => x.page === 2 && x.text === "Idli ₹40 served with chutney"), JSON.stringify(b));
+});
+
+test("pagesToBlocks + chunkBlocks: a 2-page PDF loses its header/footer and passages never span pages", () => {
+  const page = (n, body) => `Sharma Stores - Policies\n${body}\nPage ${n} of 2`;
+  const c = chunkBlocks(pagesToBlocks([page(1, "Returns within 10 days."), page(2, "Warranty is 18 months.")]));
+  assert.deepEqual(c.map((x) => [x.content, x.page]), [["Returns within 10 days.", 1], ["Warranty is 18 months.", 2]]);
+});
+
+test("chunkBlocks: sections never mix, heading paths and pages kept, rows carry column names, small-to-big context", () => {
+  const blocks = [
+    { kind: "heading", level: 1, text: "Returns" },
+    { kind: "heading", level: 2, text: "Electronics" },
+    { kind: "text", text: "Electronics can be returned within 10 days if the seal is intact." },
+    { kind: "heading", level: 2, text: "Groceries" },
+    { kind: "text", text: "Packaged groceries can be returned within 7 days.", page: 3 },
+    { kind: "heading", level: 1, text: "Prices" },
+    { kind: "table", header: ["Product", "Price"], rows: Array.from({ length: 60 }, (_, i) => [`Item ${i}`, `₹${100 + i}`]) },
+  ];
+  const c = chunkBlocks(blocks, { maxTokens: 60, contextTokens: 120 });
+  const elec = c.find((x) => x.content.includes("10 days"));
+  assert.deepEqual(elec.headingPath, ["Returns", "Electronics"]);
+  assert.ok(!elec.content.includes("7 days"), "sections are not mixed");
+  assert.equal(c.find((x) => x.content.includes("7 days")).page, 3);
+  const rows = c.filter((x) => x.headingPath[0] === "Prices");
+  assert.ok(rows.length > 3, "a big table becomes several passages");
+  assert.ok(rows.every((x) => x.content.split("\n").every((l) => /^Product: Item \d+ · Price: ₹\d+$/.test(l))), "rows are whole and keep column names");
+  assert.ok(rows.every((x) => tokens(x.content) <= 60));
+  assert.equal(elec.context, elec.content, "a small section is its own context");
+  const mid = rows[2];
+  assert.ok(mid.context.includes(mid.content) && mid.context.length > mid.content.length, "big sections give neighbours as context");
+  assert.ok(tokens(mid.context) <= 125);
+});
+
+test("htmlToBlocks: headings, lists, tables (with or without <th>), chrome skipped", () => {
+  const { title, blocks } = htmlToBlocks(`<html><head><title>Shop</title></head><body>
+    <nav>Home | About</nav><main><h1>Delivery</h1><p>We deliver in <b>2 hours</b>.</p>
+    <h2>Areas</h2><ul><li>Indiranagar</li><li>Domlur</li></ul>
+    <table><tr><td>Item</td><td>Price</td></tr><tr><td>Atta</td><td>₹265</td></tr></table>
+    <div>Call us<br>+91 98450 12345</div></main><footer>© 2026</footer></body></html>`);
+  assert.equal(title, "Shop");
+  assert.deepEqual(blocks.map((b) => b.kind), ["heading", "text", "heading", "list", "table", "text"]);
+  assert.equal(blocks[1].text, "We deliver in 2 hours.");
+  assert.deepEqual(blocks[3].items, ["Indiranagar", "Domlur"]);
+  assert.deepEqual([blocks[4].header, blocks[4].rows], [["Item", "Price"], [["Atta", "₹265"]]]);
+  assert.ok(!JSON.stringify(blocks).includes("About") && !JSON.stringify(blocks).includes("2026"), "nav and footer are skipped");
+});
+
+test("groupContext: sections merged, passages inside earlier blocks folded in, labels with section and page, token budget", () => {
+  const sec = "Electronics: 10 days.\nGroceries: 7 days.";
+  const g = groupContext(
+    [
+      { id: 1, title: "Policies", url: null, headingPath: "Returns › Electronics", page: 4, content: "Electronics: 10 days.", context: sec },
+      { id: 2, title: "Policies", url: null, headingPath: "Returns › Groceries", page: 4, content: "Groceries: 7 days.", context: sec },
+      { id: 3, title: "Menu", url: "https://x.in/menu", headingPath: "", page: null, content: "Dosa ₹80", context: null },
+      { id: 4, title: "Big", url: null, headingPath: "", page: null, content: "x", context: "word ".repeat(4000) },
+    ],
+    300
+  );
+  assert.deepEqual(g.map((x) => [x.n, x.ids]), [[1, [1, 2]], [2, [3]]], "same section once; the over-budget block is left out");
+  assert.equal(g[0].label, "Policies › Returns › Electronics (page 4)");
+  assert.equal(g[1].label, "Menu");
+  assert.equal(g[1].text, "Dosa ₹80", "no context: the passage itself");
 });

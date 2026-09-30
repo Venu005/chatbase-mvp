@@ -25,11 +25,12 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { pool, q, q1 } from "@chatbase/core/db";
 import { writeChunks } from "@chatbase/core/ingest";
+import { csvToBlocks } from "@chatbase/core/structure";
 import { loadAgent, prepareAnswer, saveAnswer, streamAnswer } from "@chatbase/core/answer";
 import { newRun } from "@chatbase/core/providers/resilient";
 import { embeddingModelId, getLLM, makeLLM } from "@chatbase/core/providers";
 import { costUsd, parsePrices } from "@chatbase/core/pricing";
-import { containsAny, expectedScript, isRefusal, percentile, rankOf, regressions, script, type Summary } from "@chatbase/core/eval-score";
+import { containsAny, expectedScript, isRefusal, normalize, percentile, rankOf, regressions, script, type Summary } from "@chatbase/core/eval-score";
 
 type Case = {
   id: string;
@@ -37,7 +38,16 @@ type Case = {
   lang: "en" | "hi" | "hinglish";
   question: string;
   history?: string[];
-  expect: { passage?: string; answer?: string[]; refuse?: boolean; notAnswer?: string[] };
+  expect: {
+    passage?: string;
+    answer?: string[];
+    refuse?: boolean;
+    notAnswer?: string[];
+    /** Must appear in the context the model is given (e.g. a labelled fact: "Our price: ₹172"). */
+    context?: string;
+    /** Must NOT appear in the top passage (a neighbouring section's fact that would make the answer ambiguous). */
+    notPassage?: string;
+  };
 };
 type Result = {
   id: string;
@@ -47,6 +57,8 @@ type Result = {
   answer: string;
   error: string | null;
   rank: number | null;
+  contextOk: boolean | null;
+  preciseOk: boolean | null;
   answerOk: boolean | null;
   refusalOk: boolean | null;
   languageOk: boolean;
@@ -56,7 +68,7 @@ type Result = {
   tokens: number | null;
   cost: number | null;
 };
-type Dataset = { name: string; instructions?: string; sources: { title: string; text: string }[]; cases: Case[] };
+type Dataset = { name: string; instructions?: string; sources: { title: string; text: string; format?: "csv" | "markdown" }[]; cases: Case[] };
 
 const args = process.argv.slice(2);
 const flag = (f: string) => args.includes(f);
@@ -83,7 +95,7 @@ async function main() {
     ))!;
     for (const s of ds.sources) {
       const src = (await q1<{ id: string }>("INSERT INTO sources (agent_id, type, title) VALUES ($1, 'text', $2) RETURNING id", [agentRow.id, s.title]))!;
-      const r = await writeChunks(src.id, agentRow.id, [{ title: s.title, url: null, text: s.text }]);
+      const r = await writeChunks(src.id, agentRow.id, [{ title: s.title, url: null, text: s.text, ...(s.format === "csv" ? { blocks: csvToBlocks(s.text) } : {}) }]);
       await q("UPDATE sources SET status = 'ready', char_count = $2, chunk_count = $3 WHERE id = $1", [src.id, r.chars, r.chunks]);
     }
     const agent = (await loadAgent(agentRow.id))!;
@@ -118,6 +130,9 @@ async function main() {
       const byId = new Map(rows.map((x) => [Number(x.id), x.content]));
       const passages = ids.map((id) => byId.get(id) ?? "");
       const rank = c.expect.passage ? rankOf(passages, c.expect.passage) : null;
+      const given = r.p.system.match(/<context>\n([\s\S]*?)\n<\/context>/)?.[1] ?? "";
+      const contextOk = c.expect.context ? normalize(given).includes(normalize(c.expect.context)) : null;
+      const preciseOk = c.expect.notPassage && passages[0] ? !normalize(passages[0]).includes(normalize(c.expect.notPassage)) : null;
       const covered = !c.expect.refuse;
       // A reply that declines never counts as correct, even if it echoes words from the question.
       const answerOk = covered ? !r.error && !isRefusal(r.text) && containsAny(r.text, c.expect.answer) : null;
@@ -134,6 +149,8 @@ async function main() {
         answer: r.text,
         error: r.error,
         rank,
+        contextOk,
+        preciseOk,
         answerOk,
         refusalOk,
         languageOk,
@@ -145,7 +162,7 @@ async function main() {
       });
       const mark = (v: boolean | null) => (v === null ? " " : v ? "✓" : "✗");
       console.log(
-        `  ${mark(rank === null ? null : rank > 0)}${mark(answerOk ?? refusalOk)}${mark(languageOk)} ${c.id.padEnd(18)} ${
+        `  ${mark(rank === null ? null : rank > 0)}${mark(contextOk)}${mark(answerOk ?? refusalOk)}${mark(languageOk)} ${c.id.padEnd(18)} ${
           rank === null ? "" : rank ? `passage #${rank}` : "passage missing"
         }${r.error ? `  ERROR ${r.error}` : ""}`
       );
@@ -163,6 +180,8 @@ async function main() {
         retrieval_hit_rate: rate(ranked.map((r) => r.rank! > 0)),
         retrieval_top1_rate: rate(ranked.map((r) => r.rank === 1)),
         retrieval_mrr: ranked.length ? ranked.reduce((s, r) => s + (r.rank ? 1 / r.rank : 0), 0) / ranked.length : null,
+        context_rate: rate(rs.map((r) => r.contextOk)),
+        precise_rate: rate(rs.map((r) => r.preciseOk)),
         answer_rate: rate(rs.map((r) => r.answerOk)),
         refusal_rate: rate(rs.map((r) => r.refusalOk)),
         language_rate: rate(rs.map((r) => r.languageOk)),
@@ -178,12 +197,12 @@ async function main() {
     const byCategory = Object.fromEntries([...new Set(results.map((r) => r.category))].map((cat) => [cat, summarize(results.filter((r) => r.category === cat))]));
 
     const pct = (v: number | null | undefined) => (v === null || v === undefined ? "  –  " : `${(v * 100).toFixed(0).padStart(3)}%`);
-    console.log(`\n${"category".padEnd(14)} n   hit@k  top1  answer refuse lang  grounded`);
+    console.log(`\n${"category".padEnd(14)} n   hit@k  top1  context precise answer refuse lang  grounded`);
     for (const [cat, s] of [...Object.entries(byCategory), ["ALL", overall] as const]) {
       console.log(
-        `${String(cat).padEnd(14)} ${String(s.questions).padEnd(3)} ${pct(s.retrieval_hit_rate)}  ${pct(s.retrieval_top1_rate)} ${pct(s.answer_rate)}  ${pct(s.refusal_rate)}  ${pct(
-          s.language_rate
-        )} ${pct(s.grounded_rate)}`
+        `${String(cat).padEnd(14)} ${String(s.questions).padEnd(3)} ${pct(s.retrieval_hit_rate)}  ${pct(s.retrieval_top1_rate)} ${pct(s.context_rate)}   ${pct(
+          s.precise_rate
+        )}   ${pct(s.answer_rate)}  ${pct(s.refusal_rate)}  ${pct(s.language_rate)} ${pct(s.grounded_rate)}`
       );
     }
     console.log(

@@ -95,7 +95,9 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `HISTORY_MAX_CHARS` | `6000` | How much of the conversation (newest first) is sent with each question. |
 | `EMBEDDING_TIMEOUT_MS`, `EMBEDDING_RETRIES` | `30000`, `3` | Time limit and retries for embedding calls. |
 | `RETRIEVAL_MIN_SCORE` | `0.2` (`0.1` in `.env.example`) | Passages scoring below this similarity are ignored. Tune per embedding model. |
-| `CHUNK_SIZE`, `CHUNK_OVERLAP` | `900`, `120` | Passage size and overlap in characters, for newly indexed sources. Tune with `pnpm eval`. |
+| `CHUNK_TOKENS`, `CONTEXT_TOKENS`, `CONTEXT_MAX_TOKENS` | `180`, `600`, `2400` | Structure-aware chunking: size of the searched passages, the surrounding section given to the model per passage, and the total context per answer (tokens). Tune with `pnpm eval`. |
+| `CHUNKER`, `CHUNK_SIZE`, `CHUNK_OVERLAP` | structured, `900`, `120` | `CHUNKER=flat` returns to the old fixed-size character chunks (size and overlap in characters), for comparisons or an emergency. |
+| `SOURCE_RESYNC_DAYS`, `RESYNC_CHECK_MS` | `7`, `600000` | Websites are re-read this often (`0` = never); the worker looks for due ones every `RESYNC_CHECK_MS`. Unchanged passages keep their embeddings. |
 | `OCR_PROVIDER`, `OCR_MODEL`, `OCR_API_KEY`, `OCR_BASE_URL`, `OCR_TIMEOUT_MS` | off | Read scanned PDFs and photos (JPG, PNG, WEBP) of price lists and menus with a vision model: `openai` (any compatible API) or `anthropic`. Enables image uploads. |
 | `PRERENDER_URL`, `PRERENDER_TIMEOUT_MS` | off, `30000` | A rendering service (URL containing `{url}`, returning rendered HTML) for websites that build their pages with JavaScript. Without it such sites fail with a clear message. |
 | `ANSWER_CACHE`, `ANSWER_CACHE_TTL_HOURS` | on, `24` | Reuse the answer to a visitor's first question asked word for word before (not in the playground). Invalidated automatically when sources, Q&A answers, instructions, the prompt or the model change. |

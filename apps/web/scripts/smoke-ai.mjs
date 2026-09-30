@@ -65,6 +65,26 @@ function scannedPdf() {
   return Buffer.from(out, "latin1");
 }
 
+/** A text PDF with one page per entry of `pages` (each an array of lines), with the same header and footer on every page. */
+function textPdf(pages) {
+  const esc = (t) => t.replace(/[\\()]/g, (m) => "\\" + m);
+  const n = pages.length;
+  const objs = ["<< /Type /Catalog /Pages 2 0 R >>", `<< /Type /Pages /Kids [${pages.map((_, i) => `${4 + i * 2} 0 R`).join(" ")}] /Count ${n} >>`, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+  pages.forEach((lines, i) => {
+    const all = ["Sharma Stores - Policies", ...lines, `Page ${i + 1} of ${n}`];
+    const stream = "BT /F1 12 Tf 14 TL 72 740 Td " + all.map((l) => `(${esc(l)}) '`).join(" ") + " ET";
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`);
+    objs.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  });
+  let out = "%PDF-1.4\n";
+  const offs = [];
+  objs.forEach((o, i) => (offs.push(out.length), (out += `${i + 1} 0 obj\n${o}\nendobj\n`)));
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map((o) => String(o).padStart(10, "0") + " 00000 n \n").join("");
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(out, "latin1");
+}
+
 export function client(base = BASE) {
   let cookie = "";
   return {
@@ -252,6 +272,103 @@ try {
   assert.equal(jsDone.status, "ready", JSON.stringify(jsDone));
   assert.ok((await chat(agentId, sid(), "sourdough bread price")).text.includes("220 rupees"));
   ok("a website that builds its pages with JavaScript is read through the rendering service");
+
+  // ---- Phase 5: structure-aware chunking (own account, so the credit and admin checks above are unaffected) ----
+  {
+    const b = client();
+    await b.json("/api/auth/signup", { method: "POST", body: { email: `chunk${Date.now()}@example.com`, password: "password-123" } });
+    const bot = (await b.json("/api/agents", { method: "POST", body: { name: "Chunk Bot" } })).data.agent.id;
+    const list = async () => (await b.json(`/api/agents/${bot}/sources`)).data.sources;
+    const settle = async (id, pred = (s) => s.status !== "processing") => {
+      for (const t0 = Date.now(); Date.now() - t0 < 40_000; await sleep(250)) {
+        const s = (await list()).find((x) => x.id === id);
+        if (s && pred(s)) return s;
+      }
+      throw new Error(`timed out waiting for source ${id}`);
+    };
+    const db3 = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await db3.connect();
+    const chunksOf = async (id) => (await db3.query("SELECT id, content, heading_path, page, context FROM chunks WHERE source_id = $1 ORDER BY id", [id])).rows;
+    const ask = async (m) => {
+      const res = await fetch(`${BASE}/api/chat/${bot}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": IP }, body: JSON.stringify({ message: m, sessionId: sid(), channel: "widget" }) });
+      const events = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l));
+      return { text: events.filter((e) => e.type === "delta").map((e) => e.text).join(""), done: events.find((e) => e.type === "done") };
+    };
+
+    // A website page with navigation, a footer, headings and a price table.
+    let page = `<html><head><title>Sharma Stores</title></head><body><nav>Home | Shop | Login</nav><main>
+      <h1>Delivery</h1><p>We deliver across Pune within 2 days. Delivery is free above Rs 499.</p>
+      <h2>Price list</h2><table><tr><th>Item</th><th>Pack</th><th>Price</th></tr><tr><td>Basmati rice</td><td>5 kg</td><td>Rs 610</td></tr><tr><td>Toor dal</td><td>1 kg</td><td>Rs 165</td></tr></table>
+      </main><footer>Copyright Sharma Stores ${RUN}</footer></body></html>`;
+    let status = 200;
+    const shop = http.createServer((_q, res) => ((res.statusCode = status), res.setHeader("content-type", "text/html"), res.end(page))).listen(0).unref();
+    const url = `http://127.0.0.1:${shop.address().port}/`;
+    const siteId = (await b.json(`/api/agents/${bot}/sources`, { method: "POST", body: { type: "url", url } })).data.source.id;
+    const site1 = await settle(siteId);
+    assert.equal(site1.status, "ready", JSON.stringify(site1));
+    assert.ok(site1.last_synced_at, "a read website records when it was read");
+    const c1 = await chunksOf(siteId);
+    const all1 = c1.map((c) => c.content).join("\n");
+    assert.ok(!all1.includes("Login") && !all1.includes("Copyright"), "navigation and footers are not knowledge: " + all1);
+    const rice = c1.find((c) => c.content.includes("Basmati rice"));
+    assert.ok(rice && /Item: Basmati rice · Pack: 5 kg · Price: Rs 610/.test(rice.content), JSON.stringify(c1));
+    assert.equal(rice.heading_path, "Delivery › Price list");
+    const rr = await ask("basmati rice price");
+    assert.ok(rr.done.citations.some((c) => c.title === "Sharma Stores › Delivery › Price list"), JSON.stringify(rr.done.citations));
+    ok("websites are read by structure: menus and footers dropped, table rows keep their column names, citations name the section");
+
+    // A spreadsheet (CSV): every row becomes a passage with its column names.
+    const fd = new FormData();
+    fd.set("file", new Blob([`Product,Code,MRP,Our price\nGhee 1L,GH-1L,700,650\nAtta 10kg,AT-10,520,480\n`], { type: "text/csv" }), "prices.csv");
+    const up = await fetch(`${BASE}/api/agents/${bot}/sources`, { method: "POST", headers: { cookie: b.cookie(), "x-forwarded-for": IP }, body: fd });
+    const csvId = (await up.json()).source.id;
+    assert.equal((await settle(csvId)).status, "ready");
+    const csvChunks = (await chunksOf(csvId)).map((c) => c.content).join("\n");
+    assert.ok(csvChunks.includes("Product: Atta 10kg · Code: AT-10 · MRP: 520 · Our price: 480"), csvChunks);
+    ok("spreadsheet rows are stored with their column names (\"Our price: 480\", not a bare \"480\")");
+
+    // A two-page PDF: the repeated header/footer is removed and answers cite the page.
+    const pdfFd = new FormData();
+    pdfFd.set("file", new Blob([textPdf([["Returns", "Unopened items can be returned within 10 days."], ["Warranty", "Mixer grinders have a warranty of 18 months."]])], { type: "application/pdf" }), "policies.pdf");
+    const pdfUp = await fetch(`${BASE}/api/agents/${bot}/sources`, { method: "POST", headers: { cookie: b.cookie(), "x-forwarded-for": IP }, body: pdfFd });
+    const pdfId = (await pdfUp.json()).source.id;
+    assert.equal((await settle(pdfId)).status, "ready");
+    const pdfChunks = await chunksOf(pdfId);
+    assert.ok(!pdfChunks.some((c) => c.content.includes("Sharma Stores - Policies") || /Page \d of 2/.test(c.content)), JSON.stringify(pdfChunks));
+    const warranty = pdfChunks.find((c) => c.content.includes("18 months"));
+    assert.equal(warranty?.page, 2, JSON.stringify(pdfChunks));
+    const wa = await ask("mixer grinder warranty");
+    assert.ok(wa.done.citations.some((c) => c.page === 2), JSON.stringify(wa.done.citations));
+    ok("PDFs lose their repeated page headers and footers, and answers cite the page number");
+
+    // Refreshing an unchanged website re-uses everything; a changed one re-embeds and invalidates cached answers.
+    const version = async () => (await db3.query("SELECT content_version FROM sources WHERE id = $1", [siteId])).rows[0].content_version;
+    const v0 = await version();
+    const before = await ask("delivery charges in Pune");
+    assert.equal((await b.json(`/api/agents/${bot}/sources/${siteId}`, { method: "POST" })).status, 202, "a ready website can be refreshed");
+    await settle(siteId, (s) => s.status === "ready" && s.last_synced_at !== site1.last_synced_at);
+    assert.deepEqual((await chunksOf(siteId)).map((c) => c.id), c1.map((c) => c.id), "an unchanged page keeps its passages");
+    assert.equal(await version(), v0, "an unchanged page doesn't invalidate cached answers");
+    page = page.replace("free above Rs 499", "free above Rs 799");
+    await b.json(`/api/agents/${bot}/sources/${siteId}`, { method: "POST" });
+    await settle(siteId, (s) => s.status === "ready" && Number((s.last_synced_at ?? "").length) > 0 && s.last_synced_at !== site1.last_synced_at);
+    for (let i = 0; i < 80 && Number(await version()) === Number(v0); i++) await sleep(250);
+    assert.ok(Number(await version()) > Number(v0), "a changed page bumps the content version");
+    const after = await ask("delivery charges in Pune");
+    assert.ok(before.text.includes("499") && after.text.includes("799"), JSON.stringify([before.text, after.text]));
+    ok("\"Refresh now\" re-reads a website: unchanged pages cost nothing, changed pages update answers at once");
+
+    // A failed refresh keeps the last good copy of the website.
+    status = 404;
+    await b.json(`/api/agents/${bot}/sources/${siteId}`, { method: "POST" });
+    const failed = await settle(siteId, (s) => s.status !== "processing" && /Last refresh failed/.test(s.error ?? ""));
+    assert.equal(failed.status, "ready", JSON.stringify(failed));
+    assert.ok((await chunksOf(siteId)).length > 0);
+    assert.ok((await ask("basmati rice price")).done.citations.length > 0, "still answered from the last good copy");
+    ok("if a refresh fails, the website keeps its last good content and says when the refresh failed");
+    shop.close();
+    await db3.end();
+  }
 
   // ---- Admin view ---------------------------------------------------------------------------------------
   assert.equal((await a.json("/api/admin/overview")).status, 404, "the customer app has no admin API");

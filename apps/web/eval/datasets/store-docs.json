@@ -1,0 +1,289 @@
+{
+  "name": "Store documents (policies, price list, FAQ, warranty table)",
+  "instructions": "You help customers of Sharma Kirana & Home, a store in Bengaluru. Be brief.",
+  "sources": [
+    {
+      "title": "Return policy",
+      "format": "markdown",
+      "text": "# Return policy\n\nWe want you to be happy with every purchase. Rules differ by product type.\n\n## Electronics\n\nElectronics can be returned within 10 days of delivery, only if the manufacturer's seal is intact. Opened electronics are handled through the brand's service centre.\n\n## Groceries\n\nPackaged groceries can be returned within 7 days if unopened. Fresh milk, fruits and vegetables cannot be returned, but damaged items are replaced the same day.\n\n## Furniture\n\nFurniture cannot be returned. You can exchange it within 3 days for a different size or colour, if it is unused.\n\n## Clothing\n\nClothing can be returned within 15 days with the original tags attached. Innerwear cannot be returned.\n\n## Refunds\n\nRefunds are credited to the original payment method within 5 working days of pickup."
+    },
+    {
+      "title": "Price list",
+      "format": "csv",
+      "text": "Product,Code,MRP,Our price,Stock\nAashirvaad Atta 5 kg,AA-5K,₹290,₹265,In stock\nAashirvaad Atta 10 kg,AA-10K,₹560,₹510,In stock\nIndia Gate Basmati Rice 1 kg,IG-1K,₹210,₹189,In stock\nFortune Sunflower Oil 1 L,FS-1L,₹165,₹145,In stock\nAmul Butter 500 g,AM-B500,₹300,₹285,Only 3 left\nAmul Taaza Milk 1 L,AM-T1L,₹58,₹56,In stock\nTata Salt 1 kg,TS-1K,₹30,₹28,In stock\nToor Dal 1 kg,TD-1K,₹200,₹172,In stock\nMoong Dal 1 kg,MD-1K,₹180,₹158,Out of stock\nChana Dal 1 kg,CD-1K,₹120,₹104,In stock\nMaggi Noodles pack of 12,MG-12,₹180,₹168,In stock\nSurf Excel 1 kg,SE-1K,₹140,₹130,In stock\nColgate MaxFresh 150 g,CG-150,₹110,₹99,In stock\nParle-G 800 g,PG-800,₹100,₹92,In stock\nBritannia Good Day 600 g,BG-600,₹150,₹135,In stock\nNescafe Classic 100 g,NC-100,₹340,₹310,In stock\nTata Tea Gold 500 g,TT-500,₹310,₹285,In stock\nRed Label Tea 1 kg,RL-1K,₹560,₹520,In stock\nSugar 1 kg,SG-1K,₹50,₹46,In stock\nJaggery 1 kg,JG-1K,₹90,₹82,In stock\nHaldiram Bhujia 400 g,HB-400,₹120,₹110,In stock\nDettol Soap pack of 4,DS-4,₹220,₹199,In stock\nLizol Floor Cleaner 1 L,LZ-1L,₹230,₹210,In stock\nVim Bar pack of 3,VB-3,₹60,₹55,In stock\nKissan Ketchup 950 g,KK-950,₹165,₹149,In stock\nMDH Garam Masala 100 g,MDH-GM,₹95,₹88,In stock\nEverest Chilli Powder 200 g,EV-CP,₹85,₹78,In stock\nSaffola Gold Oil 1 L,SF-1L,₹230,₹205,In stock\nPatanjali Ghee 1 L,PT-GH,₹650,₹599,In stock\nMother Dairy Curd 400 g,MD-C400,₹40,₹38,In stock"
+    },
+    {
+      "title": "Store FAQ",
+      "format": "markdown",
+      "text": "Delivery:\nWe deliver within 5 km of Indiranagar. Orders above ₹499 are delivered free; below that the delivery charge is ₹40. Furniture delivery takes 3 to 5 days.\n\nPayment:\nUPI, cards and cash on delivery. Cash on delivery is not available for furniture.\n\nStore hours:\nMonday to Saturday 9am to 9pm. Sunday 10am to 6pm."
+    },
+    {
+      "title": "Warranty",
+      "format": "markdown",
+      "text": "# Warranty and service\n\n| Brand | Warranty | Service centre |\n|---|---|---|\n| Philips | 2 years | Koramangala, 080 4000 1111 |\n| Bajaj | 1 year | Jayanagar, 080 4000 2222 |\n| Prestige | 5 years on the cooker body | Indiranagar, 080 4000 3333 |\n| Havells | 2 years | Whitefield, 080 4000 4444 |"
+    }
+  ],
+  "cases": [
+    {
+      "id": "ret-electronics",
+      "category": "sections",
+      "lang": "en",
+      "question": "How many days do I have to return electronics?",
+      "expect": {
+        "passage": "within 10 days",
+        "context": "Electronics can be returned within 10 days",
+        "notPassage": "within 7 days",
+        "answer": [
+          "10 days"
+        ]
+      }
+    },
+    {
+      "id": "ret-furniture",
+      "category": "sections",
+      "lang": "en",
+      "question": "Can I return a sofa I bought?",
+      "expect": {
+        "passage": "Furniture cannot be returned",
+        "context": "Furniture cannot be returned",
+        "notPassage": "within 10 days",
+        "answer": [
+          "cannot",
+          "exchange",
+          "3 days"
+        ]
+      }
+    },
+    {
+      "id": "ret-clothing",
+      "category": "sections",
+      "lang": "en",
+      "question": "What is the return window for clothes?",
+      "expect": {
+        "passage": "within 15 days",
+        "context": "Clothing can be returned within 15 days",
+        "notPassage": "within 7 days",
+        "answer": [
+          "15 days"
+        ]
+      }
+    },
+    {
+      "id": "ret-groceries",
+      "category": "sections",
+      "lang": "en",
+      "question": "Can I return groceries?",
+      "expect": {
+        "passage": "within 7 days if unopened",
+        "context": "Packaged groceries can be returned within 7 days",
+        "notPassage": "within 15 days",
+        "answer": [
+          "7 days"
+        ]
+      }
+    },
+    {
+      "id": "refund-days",
+      "category": "sections",
+      "lang": "en",
+      "question": "When will my refund come?",
+      "expect": {
+        "passage": "within 5 working days",
+        "context": "within 5 working days",
+        "answer": [
+          "5 working days"
+        ]
+      }
+    },
+    {
+      "id": "price-toor",
+      "category": "table",
+      "lang": "en",
+      "question": "What is your price for Toor Dal 1 kg?",
+      "expect": {
+        "passage": "TD-1K",
+        "context": "Our price: ₹172",
+        "answer": [
+          "172"
+        ]
+      }
+    },
+    {
+      "id": "mrp-toor",
+      "category": "table",
+      "lang": "en",
+      "question": "What is the MRP of toor dal?",
+      "expect": {
+        "passage": "TD-1K",
+        "context": "MRP: ₹200",
+        "answer": [
+          "200"
+        ]
+      }
+    },
+    {
+      "id": "stock-butter",
+      "category": "table",
+      "lang": "en",
+      "question": "Is Amul butter in stock?",
+      "expect": {
+        "passage": "AM-B500",
+        "context": "Stock: Only 3 left",
+        "answer": [
+          "3 left",
+          "only 3"
+        ]
+      }
+    },
+    {
+      "id": "stock-moong",
+      "category": "table",
+      "lang": "en",
+      "question": "Do you have moong dal?",
+      "expect": {
+        "passage": "MD-1K",
+        "context": "Stock: Out of stock",
+        "answer": [
+          "out of stock"
+        ]
+      }
+    },
+    {
+      "id": "price-ghee",
+      "category": "table",
+      "lang": "en",
+      "question": "How much is Patanjali ghee?",
+      "expect": {
+        "passage": "PT-GH",
+        "context": "Our price: ₹599",
+        "answer": [
+          "599"
+        ]
+      }
+    },
+    {
+      "id": "sku-nescafe",
+      "category": "table",
+      "lang": "en",
+      "question": "price of NC-100",
+      "expect": {
+        "passage": "NC-100",
+        "context": "Our price: ₹310",
+        "answer": [
+          "310"
+        ]
+      }
+    },
+    {
+      "id": "price-curd",
+      "category": "table",
+      "lang": "en",
+      "question": "mother dairy curd rate?",
+      "expect": {
+        "passage": "MD-C400",
+        "context": "Our price: ₹38",
+        "answer": [
+          "38"
+        ]
+      }
+    },
+    {
+      "id": "faq-delivery-free",
+      "category": "faq",
+      "lang": "en",
+      "question": "Is delivery free?",
+      "expect": {
+        "passage": "above ₹499",
+        "context": "Orders above ₹499 are delivered free",
+        "answer": [
+          "499"
+        ]
+      }
+    },
+    {
+      "id": "faq-cod-furniture",
+      "category": "faq",
+      "lang": "en",
+      "question": "Can I pay cash on delivery for a table?",
+      "expect": {
+        "passage": "not available for furniture",
+        "context": "Cash on delivery is not available for furniture",
+        "answer": [
+          "not available",
+          "no"
+        ]
+      }
+    },
+    {
+      "id": "faq-sunday",
+      "category": "faq",
+      "lang": "en",
+      "question": "What are your Sunday hours?",
+      "expect": {
+        "passage": "Sunday 10am to 6pm",
+        "context": "Sunday 10am to 6pm",
+        "answer": [
+          "10am",
+          "6pm"
+        ]
+      }
+    },
+    {
+      "id": "warranty-prestige",
+      "category": "table",
+      "lang": "en",
+      "question": "What is the warranty on Prestige?",
+      "expect": {
+        "passage": "Prestige",
+        "context": "Brand: Prestige · Warranty: 5 years on the cooker body",
+        "answer": [
+          "5 years"
+        ]
+      }
+    },
+    {
+      "id": "service-bajaj",
+      "category": "table",
+      "lang": "en",
+      "question": "Where is the Bajaj service centre?",
+      "expect": {
+        "passage": "Bajaj",
+        "context": "Service centre: Jayanagar",
+        "answer": [
+          "Jayanagar"
+        ]
+      }
+    },
+    {
+      "id": "hinglish-toor",
+      "category": "hinglish",
+      "lang": "hinglish",
+      "question": "toor dal ka rate kya hai?",
+      "expect": {
+        "passage": "TD-1K",
+        "context": "Our price: ₹172",
+        "answer": [
+          "172"
+        ]
+      }
+    },
+    {
+      "id": "oos-laptop",
+      "category": "out_of_scope",
+      "lang": "en",
+      "question": "Do you repair laptops?",
+      "expect": {
+        "refuse": true
+      }
+    },
+    {
+      "id": "oos-parking",
+      "category": "out_of_scope",
+      "lang": "en",
+      "question": "Is there parking for trucks?",
+      "expect": {
+        "refuse": true
+      }
+    }
+  ]
+}
