@@ -533,3 +533,47 @@ test("groupContext: sections merged, passages inside earlier blocks folded in, l
   assert.equal(g[1].label, "Menu");
   assert.equal(g[1].text, "Dosa ₹80", "no context: the passage itself");
 });
+
+test("languageOf: scripts, Hinglish vs English", async () => {
+  const { languageOf } = await import("../src/insights.ts");
+  assert.equal(languageOf("What is the price of basmati rice?"), "en");
+  assert.equal(languageOf("basmati rice ka price kya hai"), "hinglish");
+  assert.equal(languageOf("kitna hai?"), "hinglish");
+  assert.equal(languageOf("delivery kab tak hogi"), "hinglish");
+  assert.equal(languageOf("Is Sunday open to the public?"), "en");
+  assert.equal(languageOf("चावल की कीमत क्या है?"), "hi");
+  assert.equal(languageOf("அரிசி விலை என்ன?"), "ta");
+  assert.equal(languageOf("ধন্যবাদ"), "bn");
+  assert.equal(languageOf("123 ???"), "other");
+});
+
+test("topicOf: English, Hinglish and Hindi questions", async () => {
+  const { topicOf, questionKey } = await import("../src/insights.ts");
+  assert.equal(topicOf("How much is the rice?"), "price");
+  assert.equal(topicOf("rice ka daam batao"), "price");
+  assert.equal(topicOf("चावल की कीमत"), "price");
+  assert.equal(topicOf("Where is my order? It's late"), "order_status");
+  assert.equal(topicOf("Can I get a refund on this price?"), "returns");
+  assert.equal(topicOf("Do you deliver to Pune?"), "delivery");
+  assert.equal(topicOf("Are you open on Sunday?"), "hours");
+  assert.equal(topicOf("Tell me a joke"), "other");
+  assert.equal(questionKey("  What's the PRICE?? "), "what s the price");
+});
+
+test("agentHealth and churnRisk", async () => {
+  const { agentHealth, churnRisk } = await import("../src/insights.ts");
+  const good = agentHealth({ answers: 100, errors: 0, gaps: 5, thumbsUp: 10, thumbsDown: 1, readySources: 3, failedSources: 0, qaAnswers: 2 });
+  assert.deepEqual(good, { score: 100, issues: [] });
+  const bad = agentHealth({ answers: 50, errors: 5, gaps: 25, thumbsUp: 1, thumbsDown: 4, readySources: 1, failedSources: 1, qaAnswers: 0 });
+  assert.ok(bad.score < 40, JSON.stringify(bad));
+  assert.match(bad.issues[0], /not in its sources/);
+  assert.equal(agentHealth({ answers: 0, errors: 0, gaps: 0, thumbsUp: 0, thumbsDown: 0, readySources: 0, failedSources: 0, qaAnswers: 0 }).score, 60);
+
+  const base = { subscriptionStatus: "active", cancelAtPeriodEnd: false, answersLast14: 100, answersPrev14: 100, daysSinceLastAnswer: 0, gapRate: 0.1, thumbsDownRate: 0 };
+  assert.equal(churnRisk(base).level, "low");
+  assert.equal(churnRisk({ ...base, cancelAtPeriodEnd: true }).level, "high");
+  const drop = churnRisk({ ...base, answersLast14: 30 });
+  assert.equal(drop.level, "medium");
+  assert.match(drop.reasons[0], /usage down 70%/);
+  assert.equal(churnRisk({ ...base, daysSinceLastAnswer: null, answersLast14: 0, answersPrev14: 0 }).reasons[0], "never had a real conversation");
+});

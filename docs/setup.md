@@ -85,7 +85,8 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `ADMIN_URL` | none | Public address of the admin app, e.g. `https://admin.yourdomain.in`. Starting with `https://` turns on secure admin cookies. |
 | `LLM_PRICES` | none | USD per million input/output tokens by model id, e.g. `gpt-4.1-mini=0.40/1.60, claude-haiku-4-5=1/5`. Used for cost tracking; models without a price show tokens only. |
 | `EMBEDDING_PRICE_PER_MTOK` | none | USD per million embedded tokens. |
-| `USD_INR_RATE` | none | Also show costs in rupees in the admin view. |
+| `USD_INR_RATE` | none | Also show costs in rupees in the admin view (profit figures assume 85 when blank). |
+| `ALERT_EMAILS`, `ALERTS` | all admins, on | Who gets operational alert e-mails; `off` stops the checks. Thresholds: `ALERT_WINDOW_MINUTES`, `ALERT_MIN_ANSWERS`, `ALERT_ERROR_RATE`, `ALERT_P95_MS`, `ALERT_FALLBACK_RATE`, `ALERT_FAILED_SOURCES`, `ALERT_COOLDOWN_MINUTES`, `ALERT_CHECK_MS` (see [admin.md](admin.md)). |
 | `LLM_FIRST_TOKEN_TIMEOUT_MS`, `LLM_TIMEOUT_MS` | `20000`, `90000` | Time limits for the first word of an answer and for the whole answer. |
 | `LLM_RETRIES` | `2` | Retries (with backoff) for rate limits, overload, server errors and timeouts, only before any text reaches the customer. |
 | `LLM_FALLBACK_PROVIDER`, `LLM_FALLBACK_MODEL` | off | Backup model used when the main one keeps failing (for example `openai` with a small model). |

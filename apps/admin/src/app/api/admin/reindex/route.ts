@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { handle } from "@chatbase/core/http";
 import { embeddingModelId, getEmbedder } from "@chatbase/core/providers";
 import { requeueSource } from "@chatbase/core/ingest-queue";
+import { audit } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
  * are reported so their owners can re-add them.
  */
 export const POST = handle(async () => {
-  await requireAdmin();
+  const me = await requireAdmin();
   const model = embeddingModelId();
   const stale = await q<{ id: string; type: string; reprocessable: boolean }>(
     `SELECT s.id, s.type, (s.type = 'url' OR EXISTS (SELECT 1 FROM source_payloads p WHERE p.source_id = s.id AND (p.docs IS NOT NULL OR p.file IS NOT NULL))) AS reprocessable
@@ -32,5 +33,6 @@ export const POST = handle(async () => {
     const vectors = await embedder.embed(batch.map((f) => f.question));
     for (const [j, f] of batch.entries()) await q("UPDATE answer_fixes SET embedding = $2::vector, embedding_model = $3 WHERE id = $1", [f.id, toVector(vectors[j]), model]);
   }
+  await audit(me, "reindex", null, { model, sourcesQueued: queued, qaAnswers: fixes.length });
   return NextResponse.json({ model, sourcesQueued: queued, sourcesNotReprocessable: stale.filter((s) => !s.reprocessable).length, qaAnswersReembedded: fixes.length });
 });

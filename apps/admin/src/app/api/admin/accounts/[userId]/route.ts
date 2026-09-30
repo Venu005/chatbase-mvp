@@ -3,6 +3,7 @@ import { q, q1 } from "@chatbase/core/db";
 import { requireAdmin } from "@/lib/auth";
 import { HttpError, handle } from "@chatbase/core/http";
 import { SINCE, TZ, periodQuery } from "@/lib/admin";
+import { getUsage } from "@chatbase/core/usage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,9 +18,9 @@ export const GET = handle<Ctx>(async (req, { params }) => {
   const days = periodQuery.parse(Object.fromEntries(req.nextUrl.searchParams)).days;
   const args = [days, TZ, userId];
 
-  const user = await q1("SELECT id, email, name, plan, created_at FROM users WHERE id = $1", [userId]);
+  const user = await q1<{ plan: string }>("SELECT id, email, name, plan, plan_comped, created_at FROM users WHERE id = $1", [userId]);
   if (!user) throw new HttpError(404, "Account not found");
-  const [subscription, agents, calls] = await Promise.all([
+  const [subscription, agents, calls, usage, auditLog] = await Promise.all([
     q1("SELECT plan, status, current_end, cancel_at_period_end FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1", [userId]),
     q(
       `SELECT a.id, a.name, a.created_at, a.handoff_enabled, a.lead_mode, cardinality(a.allowed_domains) AS allowed_domains,
@@ -45,6 +46,8 @@ export const GET = handle<Ctx>(async (req, { params }) => {
         WHERE k.user_id = $1 ORDER BY k.created_at DESC LIMIT 50`,
       [userId]
     ),
+    getUsage(userId, user.plan),
+    q("SELECT id, admin_email, action, details, created_at FROM admin_audit WHERE target_user_id = $1 ORDER BY created_at DESC LIMIT 20", [userId]),
   ]);
-  return NextResponse.json({ user, subscription, agents, calls });
+  return NextResponse.json({ user, subscription, agents, calls, usage, audit: auditLog });
 });

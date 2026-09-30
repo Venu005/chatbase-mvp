@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api, json } from "@chatbase/core/client";
 import { ColumnChart, Tile } from "@chatbase/ui/charts";
 import Admins from "./Admins";
+import { compact, n, pct, secs, usd, when } from "@/lib/format";
+import { AlertBanner, AuditTab, BusinessTab, GrowthTab, OpsTab, QualityTab, type Alert } from "./Insights";
+import AccountActions from "./AccountActions";
 
 // ---- types (mirroring /api/admin/*) -------------------------------------------------------------------
 type Totals = {
@@ -94,6 +97,7 @@ type Overview = {
     failedSources: { id: string; title: string; type: string; error: string | null; attempts: number; updated_at: string; agent_name: string; email: string }[];
   };
   embedding: { stale: number; untracked: number; total: number };
+  alerts: Alert[];
 };
 type CallRow = {
   id: string;
@@ -115,7 +119,9 @@ type CallRow = {
   fixes: number;
 };
 type AccountDetail = {
-  user: { id: string; email: string; name: string; plan: string; created_at: string };
+  user: { id: string; email: string; name: string; plan: string; plan_comped: boolean; created_at: string };
+  usage: { used: number; limit: number };
+  audit: { id: string; admin_email: string; action: string; details: Record<string, unknown>; created_at: string }[];
   subscription: { plan: string; status: string; current_end: string | null; cancel_at_period_end: boolean } | null;
   agents: {
     id: string;
@@ -166,24 +172,7 @@ type Trace = {
   fixes: { id: string; score: number; question: string; answer: string | null }[];
 };
 
-// ---- formatting ---------------------------------------------------------------------------------------
-const n = (v: number | string) => Number(v).toLocaleString("en-IN");
-/** 950 · 12.4K · 3.2L (lakh) · 1.5Cr (crore) */
-function compact(v: number | string): string {
-  const x = Number(v);
-  const f = (d: number, u: string) => `${(x / d).toFixed(x / d < 10 ? 1 : 0).replace(/\.0$/, "")}${u}`;
-  return x < 1000 ? x.toLocaleString("en-IN") : x < 100_000 ? f(1000, "K") : x < 10_000_000 ? f(100_000, "L") : f(10_000_000, "Cr");
-}
-const pct = (part: number, whole: number) => (whole ? `${((part / whole) * 100).toFixed(part / whole < 0.1 ? 1 : 0)}%` : "–");
-const secs = (ms: number | null | undefined) => (ms === null || ms === undefined ? "–" : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
-const when = (d: string | null) => (d ? new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "never");
-function usd(v: number | null | undefined, rate: number | null): string {
-  if (v === null || v === undefined) return "no price";
-  const d = v === 0 ? "$0" : v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`;
-  return rate ? `${d} · ₹${(v * rate).toFixed(v * rate < 1 ? 2 : 0)}` : d;
-}
-
-const TABS = ["Overview", "Accounts", "Problems", "Models & ingestion", "Admins"] as const;
+const TABS = ["Overview", "Business", "Growth", "Quality", "Accounts", "Problems", "Operations", "Audit log", "Admins"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function Admin() {
@@ -209,6 +198,7 @@ export default function Admin() {
     return () => clearInterval(t);
   }, [load]);
 
+  const openAccount = (id: string) => (setAccount(id), setTab("Accounts"));
   if (error) return <main className="page wide"><p className="error-text">{error}</p></main>;
   if (!data) return <main className="page wide"><p className="muted">Loading…</p></main>;
   const t = data.totals;
@@ -234,6 +224,8 @@ export default function Admin() {
           ))}
         </div>
       </div>
+
+      <AlertBanner alerts={data.alerts} />
 
       <nav className="tabs" role="tablist">
         {TABS.map((x) => (
@@ -294,7 +286,7 @@ export default function Admin() {
               <h3>Top accounts</h3>
               <button className="link-btn" onClick={() => setTab("Accounts")}>All accounts</button>
             </div>
-            <AccountsTable accounts={data.accounts.slice(0, 8)} rate={rate} onOpen={(id) => (setAccount(id), setTab("Accounts"))} />
+            <AccountsTable accounts={data.accounts.slice(0, 8)} rate={rate} onOpen={openAccount} />
           </div>
         </section>
       )}
@@ -353,7 +345,16 @@ export default function Admin() {
         </section>
       )}
 
-      {tab === "Models & ingestion" && <ModelsAndIngestion data={data} rate={rate} reload={load} />}
+      {tab === "Business" && <BusinessTab days={days} onOpen={openAccount} />}
+      {tab === "Growth" && <GrowthTab days={days} onOpen={openAccount} />}
+      {tab === "Quality" && <QualityTab days={days} />}
+      {tab === "Operations" && (
+        <>
+          <OpsTab days={days} />
+          <ModelsAndIngestion data={data} rate={rate} reload={load} />
+        </>
+      )}
+      {tab === "Audit log" && <AuditTab />}
 
       {tab === "Admins" && <Admins />}
 
@@ -416,9 +417,10 @@ function AccountsTable({ accounts, rate, onOpen }: { accounts: Account[]; rate: 
 function AccountPanel({ id, days, rate, onBack, onTrace }: { id: string; days: number; rate: number | null; onBack: () => void; onTrace: (id: string) => void }) {
   const [d, setD] = useState<AccountDetail | null>(null);
   const [error, setError] = useState("");
+  const reload = useCallback(() => api<AccountDetail>(`/api/admin/accounts/${id}?days=${days}`).then(setD, (e) => setError(e.message)), [id, days]);
   useEffect(() => {
-    api<AccountDetail>(`/api/admin/accounts/${id}?days=${days}`).then(setD, (e) => setError(e.message));
-  }, [id, days]);
+    void reload();
+  }, [reload]);
   if (error) return <p className="error-text">{error}</p>;
   if (!d) return <p className="muted">Loading…</p>;
   return (
@@ -430,6 +432,7 @@ function AccountPanel({ id, days, rate, onBack, onTrace }: { id: string; days: n
             <h2 style={{ margin: 0 }}>{d.user.email}</h2>
             <span className="muted small">
               {d.user.name && `${d.user.name} · `}joined {new Date(d.user.created_at).toLocaleDateString("en-IN")} · plan <b>{d.user.plan}</b>
+              {d.user.plan_comped && " (comped)"} · {n(d.usage.used)} / {n(d.usage.limit)} credits this month
               {d.subscription && ` · subscription ${d.subscription.status}${d.subscription.cancel_at_period_end ? " (cancels at period end)" : ""}`}
             </span>
           </div>
@@ -477,6 +480,7 @@ function AccountPanel({ id, days, rate, onBack, onTrace }: { id: string; days: n
           </table>
         </div>
       </div>
+      <AccountActions user={d.user} audit={d.audit} onChanged={reload} />
       <div className="card stack">
         <h3>Latest AI calls</h3>
         <CallsTable calls={d.calls} rate={rate} onTrace={onTrace} />

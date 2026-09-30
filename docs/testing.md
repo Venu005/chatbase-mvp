@@ -31,7 +31,7 @@ SMTP_URL=smtp://127.0.0.1:4025 EMAIL_FROM="Bot <bot@example.com>" \
 RAZORPAY_API_BASE=http://127.0.0.1:4030 RAZORPAY_KEY_ID=rzp_test_fake RAZORPAY_KEY_SECRET=fake_key_secret \
 RAZORPAY_WEBHOOK_SECRET=whsec_test RAZORPAY_PLAN_STARTER=plan_starter0000001 RAZORPAY_PLAN_GROWTH=plan_growth00000001 \
 META_APP_ID=app_123456 META_APP_SECRET=platform-app-secret-for-tests META_ES_CONFIG_ID=cfg_987654 \
-WHATSAPP_WEBHOOK_VERIFY_TOKEN=platform-verify-token \
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=platform-verify-token ALERTS=off \
 pnpm start
 
 # terminal 2
@@ -39,6 +39,8 @@ pnpm smoke             # accounts, ingestion, RAG answers, isolation, limits, wi
 pnpm smoke:ai          # AI pipeline: retries, timeouts, backup model, structured chunking (sites, CSV, PDF pages),
                        # website refresh, usage and cost records, admin view
 pnpm smoke:admin       # admin app: sign-in, adding and removing admins, password changes, separate sessions
+pnpm smoke:insights    # admin insights: MRR/profit, funnel/cohorts/churn risk, languages/topics/health, alerts,
+                       # comped plans, bonus credits, read-only conversations, audit log
 pnpm smoke:features    # 👍/👎 feedback, Q&A answers, analytics, lead capture and CSV
 pnpm smoke:account     # password reset e-mails and links, allowed websites for the widget
 pnpm smoke:whatsapp    # manual WhatsApp connection, webhook signatures, dedupe, replies, credits

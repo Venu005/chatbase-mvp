@@ -3,6 +3,7 @@ import { z } from "zod";
 import { q1 } from "@chatbase/core/db";
 import { HttpError, handle } from "@chatbase/core/http";
 import { envAdminEmails, requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/admin";
 
 export const runtime = "nodejs";
 
@@ -17,5 +18,6 @@ export const DELETE = handle<Ctx>(async (_req, { params }) => {
   if (!target) throw new HttpError(404, "Not found");
   if (envAdminEmails().includes(target.email)) throw new HttpError(400, "This admin is listed in ADMIN_EMAILS; remove them there");
   await q1("DELETE FROM admins WHERE id = $1", [id]);
+  await audit(me, "admin.remove", null, { email: target.email });
   return NextResponse.json({ ok: true });
 });
