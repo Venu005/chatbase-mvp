@@ -41,6 +41,7 @@ pnpm smoke             # accounts, ingestion, RAG answers, isolation, limits, wi
 pnpm smoke:ai          # AI pipeline: retries, timeouts, backup model, structured chunking (sites, CSV, PDF pages),
                        # website refresh, usage and cost records, admin view
 pnpm smoke:admin       # admin app: sign-in, adding and removing admins, password changes, separate sessions
+pnpm smoke:docs        # docs site: every page, link between pages, #anchor, screenshot and the search index
 pnpm smoke:voice       # voice agents: website voice, Plivo and Exotel calls, barge-in, handoff and transfer, latency
 pnpm smoke:insights    # admin insights: MRR/profit, funnel/cohorts/churn risk, languages/topics/health, alerts,
                        # comped plans, bonus credits, read-only conversations, audit log

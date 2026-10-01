@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Admin from "@/components/Admin";
 import Nav from "@/components/Nav";
 import { getAdmin } from "@/lib/auth";
+import { docsUrl } from "@chatbase/core/env";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export default async function AdminPage() {
   if (!admin) redirect("/login");
   return (
     <>
-      <Nav email={admin.email} />
+      <Nav email={admin.email} docsUrl={docsUrl()} />
       <Admin />
     </>
   );

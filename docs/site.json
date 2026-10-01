@@ -1,0 +1,69 @@
+{
+  "title": "Chatbase India Docs",
+  "repo": "https://github.com/Venu005/chatbase-mvp",
+  "sections": [
+    {
+      "title": "Get started",
+      "pages": [
+        { "file": "index.md", "slug": "", "label": "Introduction" },
+        { "file": "guide/getting-started.md", "slug": "getting-started" }
+      ]
+    },
+    {
+      "title": "Teach the assistant",
+      "pages": [
+        { "file": "guide/sources.md", "slug": "sources" },
+        { "file": "guide/qa-answers.md", "slug": "qa-answers" },
+        { "file": "guide/playground-and-settings.md", "slug": "playground-and-settings" }
+      ]
+    },
+    {
+      "title": "Reach customers",
+      "pages": [
+        { "file": "guide/website-chat.md", "slug": "website-chat" },
+        { "file": "guide/whatsapp.md", "slug": "whatsapp-for-businesses" },
+        { "file": "guide/voice.md", "slug": "talk-to-the-assistant" }
+      ]
+    },
+    {
+      "title": "Conversations and growth",
+      "pages": [
+        { "file": "guide/inbox-and-handoff.md", "slug": "inbox-and-handoff" },
+        { "file": "guide/leads.md", "slug": "leads" },
+        { "file": "guide/analytics.md", "slug": "analytics" },
+        { "file": "guide/plans-and-billing.md", "slug": "plans-and-billing" },
+        { "file": "guide/languages-and-ai.md", "slug": "languages-and-ai" }
+      ]
+    },
+    {
+      "title": "Run the platform",
+      "pages": [
+        { "file": "setup.md", "slug": "setup" },
+        { "file": "deployment.md", "slug": "deployment" },
+        { "file": "go-live.md", "slug": "go-live" },
+        { "file": "providers.md", "slug": "providers" },
+        { "file": "ai-in-production.md", "slug": "ai-in-production" },
+        { "file": "admin.md", "slug": "admin" },
+        { "file": "voice.md", "slug": "voice" }
+      ]
+    },
+    {
+      "title": "Integrations",
+      "pages": [
+        { "file": "whatsapp.md", "slug": "whatsapp" },
+        { "file": "embedded-signup.md", "slug": "embedded-signup" },
+        { "file": "handoff.md", "slug": "handoff" },
+        { "file": "billing-razorpay.md", "slug": "billing-razorpay" }
+      ]
+    },
+    {
+      "title": "Reference",
+      "pages": [
+        { "file": "security.md", "slug": "security" },
+        { "file": "testing.md", "slug": "testing" },
+        { "file": "troubleshooting.md", "slug": "troubleshooting" },
+        { "file": "roadmap.md", "slug": "roadmap" }
+      ]
+    }
+  ]
+}

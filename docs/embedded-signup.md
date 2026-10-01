@@ -19,7 +19,7 @@ operate **one Meta app for the whole platform**; each customer's number is attac
 - Completing **Business Verification** raises the number of customers you may onboard per week (Meta documents 10 without,
   200 with it).
 
-If you are not a Tech Provider yet, keep using the **manual** connection ([whatsapp.md](whatsapp.md)); it needs none of this.
+If you are not a Tech Provider yet, keep using the **manual** connection ([WhatsApp guide](whatsapp.md)); it needs none of this.
 
 ## Setup steps
 

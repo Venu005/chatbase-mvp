@@ -12,6 +12,7 @@
     "dev": "turbo run dev",
     "dev:web": "pnpm --filter @chatbase/web dev",
     "dev:admin": "pnpm --filter @chatbase/admin dev",
+    "dev:docs": "pnpm --filter @chatbase/docs dev",
     "build": "turbo run build",
     "start": "turbo run start",
     "typecheck": "turbo run typecheck",
@@ -30,6 +31,7 @@
     "smoke:admin": "pnpm --filter @chatbase/admin smoke",
     "smoke:insights": "pnpm --filter @chatbase/admin smoke:insights",
     "smoke:voice": "pnpm --filter @chatbase/voice smoke",
+    "smoke:docs": "pnpm --filter @chatbase/docs smoke",
     "eval": "pnpm --filter @chatbase/web eval",
     "razorpay:setup": "pnpm --filter @chatbase/web razorpay:setup"
   },
