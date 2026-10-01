@@ -17,6 +17,8 @@ const noFrame = [
 const nextConfig = {
   poweredByHeader: false,
   transpilePackages: ["@chatbase/core", "@chatbase/ui"],
+  // Loaded by Node as-is instead of bundled: unpdf (PDF reading) uses import.meta in a way webpack warns about.
+  serverExternalPackages: ["unpdf"],
   async headers() {
     return [{ source: "/:path*", headers: noFrame }];
   },
