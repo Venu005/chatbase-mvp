@@ -78,7 +78,7 @@ The vector size is fixed when the `chunks` table is created by `pnpm migrate`, s
 model returns (text-embedding-3-small: 1536; text-embedding-3-large: 3072, or 1536 with `EMBEDDING_SEND_DIMENSIONS=true`).
 If you have not stored real data yet, the simplest fix is a fresh database: `docker compose down -v`, `docker compose up
 -d`, correct `EMBEDDING_DIM`, `pnpm migrate`. With data you want to keep, you have to change the column and re-index
-every source; see [providers.md](providers.md#the-vector-size-is-permanent). `pnpm preflight --live` checks this for you.
+every source; see [AI providers](providers.md#the-vector-size-is-permanent). `pnpm preflight --live` checks this for you.
 
 **The assistant answers "I don't know" or ignores my content.**
 Retrieval found nothing above `RETRIEVAL_MIN_SCORE`. With `EMBEDDING_PROVIDER=mock` this happens constantly, because the
@@ -92,7 +92,7 @@ citations to see what was retrieved.
 **Answers are in the wrong language, or mixed.**
 The assistant is told to answer in the customer's language. If it does not, add a line to the agent's instructions (for
 example "Reply in the language of the customer's message; for Hinglish reply in Hinglish"), and see the Indian-language
-tips in [providers.md](providers.md).
+tips in [AI providers](providers.md).
 
 **Sarvam: replies contain reasoning text, or they are slow.**
 Set `SARVAM_REASONING_EFFORT=none` (the value in `.env.example`). The app also strips `<think>...</think>` blocks from the
@@ -190,7 +190,7 @@ brief in the agent instructions if that is too much.
 
 ## Embedded Signup ("Connect with Facebook")
 
-Also read [embedded-signup.md](embedded-signup.md), which lists what Meta requires.
+Also read [Embedded Signup guide](embedded-signup.md), which lists what Meta requires.
 
 **The "Connect with Facebook" button does not appear (only the manual form).**
 The server needs all four values: `META_APP_ID`, `META_APP_SECRET`, `META_ES_CONFIG_ID` and
@@ -273,13 +273,13 @@ Key id and secret do not belong together, or you mixed test and live. `pnpm pref
 
 **I paid in test mode but the plan did not change.**
 Only the signed webhook changes a plan. Check in the Razorpay Dashboard, Webhooks, that a webhook exists for
-`APP_URL/api/razorpay/webhook` with the events listed in [billing-razorpay.md](billing-razorpay.md), that the secret equals
+`APP_URL/api/razorpay/webhook` with the events listed in [Razorpay billing guide](billing-razorpay.md), that the secret equals
 `RAZORPAY_WEBHOOK_SECRET`, and look at the webhook's delivery log. A `401 Invalid signature` there means the secrets differ.
 Razorpay cannot reach `localhost`: use a tunnel.
 
 **After cancelling, the plan is still active.**
 Correct: a paid plan stays until the end of the period that was paid for. Confirm the exact timing in test mode before
-launch (see the note in [billing-razorpay.md](billing-razorpay.md)).
+launch (see the note in [Razorpay billing guide](billing-razorpay.md)).
 
 **"You already have an active subscription. Cancel it first to switch plans."**
 Plan changes are cancel-and-resubscribe in this version.
@@ -290,7 +290,7 @@ Plan changes are cancel-and-resubscribe in this version.
 2. Read the server log around the time of the problem.
 3. Run the matching smoke test (`pnpm smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`,
    `smoke:sarvam`). They use fake external services, so if they pass and the real thing fails, the problem is in the
-   configuration or in the external account rather than in the app. See [testing.md](testing.md).
+   configuration or in the external account rather than in the app. See [testing](testing.md).
 4. Remember that the code has been tested only against fake versions of Meta, Razorpay, OpenAI, Anthropic and Sarvam. If a
    real service behaves differently from its documentation, the log line with the service's own error message is the most
    useful thing to look at.

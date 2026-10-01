@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Dashboard from "@/components/Dashboard";
 import Nav from "@/components/Nav";
 import { getUser } from "@chatbase/core/auth";
+import { docsUrl } from "@chatbase/core/env";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
   return (
     <>
-      <Nav email={user.email} />
+      <Nav email={user.email} docsUrl={docsUrl()} />
       <Dashboard />
     </>
   );

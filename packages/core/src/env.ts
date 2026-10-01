@@ -19,3 +19,6 @@ export function envNum(name: string, fallback: number): number {
 
 /** True for template values such as REPLACE_ME or change-me that were never filled in. */
 export const isPlaceholder = (s: string): boolean => /replace[-_ ]?me|change[-_ ]?me/i.test(s);
+
+/** The documentation site (apps/docs), linked from the dashboard and the admin app. */
+export const docsUrl = (): string => (env("DOCS_URL") ?? "http://localhost:3003").replace(/\/$/, "");

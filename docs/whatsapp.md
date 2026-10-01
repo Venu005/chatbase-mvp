@@ -8,7 +8,7 @@ There are two ways to connect a number. You can offer both.
 | | **Connect with Facebook** (Embedded Signup) | **Manual** |
 | --- | --- | --- |
 | Customer effort | Click a button, log in to Facebook, pick or create a WhatsApp number | Copy a Phone number ID, an access token and an app secret from their own Meta app |
-| You need | A Meta app with Embedded Signup approved for your business ([embedded-signup.md](embedded-signup.md)) | Nothing extra |
+| You need | A Meta app with Embedded Signup approved for your business ([Embedded Signup guide](embedded-signup.md)) | Nothing extra |
 | Webhook set up in Meta | Once, by you | By each customer |
 | Environment variables | `META_APP_ID`, `META_APP_SECRET`, `META_ES_CONFIG_ID`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | none |
 
@@ -35,7 +35,7 @@ The temporary 24-hour token on the API Setup page is fine for a first test; use 
   Voice notes longer than about 30 seconds, or ones that can't be understood, get a "please type it" reply.
 - Every WhatsApp customer is saved in the **Leads** tab with their number and WhatsApp profile name.
 - Images and other media get a polite "I can only read text" reply, unless a person is handling the chat
-  (then the owner sees a note that media arrived, see [handoff.md](handoff.md)).
+  (then the owner sees a note that media arrived, see [handoff guide](handoff.md)).
 - Typing `human`, `agent`, or a phrase like "talk to a person" or "insaan se baat karni hai" hands the chat to the owner.
 - Each sender is limited to 10 messages a minute; extra messages are ignored.
 - Every answer uses one message credit, the same as the website chat.
@@ -72,4 +72,4 @@ are never sent back to the browser.
 - **Not verified live.** The webhook and send code follow Meta's documented formats and were tested against a fake Meta
   server, not a live account.
 
-See [troubleshooting.md](troubleshooting.md) for webhook and delivery problems.
+See [troubleshooting](troubleshooting.md) for webhook and delivery problems.

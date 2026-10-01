@@ -10,7 +10,7 @@ This guide takes you from a fresh checkout to a running app, then lists every se
 | Node.js 22.9 or newer | `node -v` |
 | pnpm 10 or newer | `corepack enable` (the exact version is pinned in `package.json`), or `npm i -g pnpm` |
 | Postgres 15+ with the **pgvector** extension | `docker compose up -d` starts a suitable one (image `pgvector/pgvector:pg16`). Managed Postgres works if it offers pgvector. |
-| An AI provider account (later) | The app runs without one using built-in mock models. See [providers.md](providers.md). |
+| An AI provider account (later) | The app runs without one using built-in mock models. See [AI providers](providers.md). |
 
 ## 2. First run (about 5 minutes, no API keys)
 
@@ -30,7 +30,7 @@ Generate the two secrets with `openssl rand -base64 48`: put one in `AUTH_SECRET
 `ENCRYPTION_KEY`. The app rejects the `REPLACE_ME` placeholder as a secret, so sign-up and login fail until you replace it.
 
 Open http://localhost:3000, sign up, create an agent, add a website URL or paste your FAQ, and chat in the Playground.
-With mock models the replies just quote your best-matching passage. Move on to [providers.md](providers.md) for real answers.
+With mock models the replies just quote your best-matching passage. Move on to [AI providers](providers.md) for real answers.
 
 ## 3. Filling in `.env` with real values
 
@@ -55,10 +55,13 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | --- | --- | --- | --- |
 | `DATABASE_URL` | yes | | Postgres connection string, e.g. `postgres://user:pass@host:5432/db`. Add `?sslmode=require` for most managed databases. |
 | `AUTH_SECRET` | yes | | 32+ random characters that sign login cookies. Changing it logs everyone out. |
+| `DOCS_URL` | `http://localhost:3003` | Public address of the documentation site (`apps/docs`), e.g. `https://docs.chatbase.in`. The dashboard's and admin app's **Help** links open it. |
 | `APP_URL` | recommended | `http://localhost:3000` in links | Public address of the app, no trailing slash. Used in the embed snippet, e-mail links, WhatsApp callback URLs. Starting with `https://` turns on secure cookies. Must be public https for WhatsApp and Razorpay webhooks. |
 | `ENCRYPTION_KEY` | recommended | derived from `AUTH_SECRET` | 32+ random characters that encrypt customers' WhatsApp tokens at rest. Set it once and back it up; if it changes, stored tokens cannot be read and customers must reconnect WhatsApp. |
 
-### AI models (details in [providers.md](providers.md))
+### AI models
+
+Details and recipes: [AI providers](providers.md).
 
 | Variable | Default | What it is |
 | --- | --- | --- |
@@ -70,7 +73,7 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `SARVAM_REASONING_EFFORT` | service default | `none` (recommended for support answers), `low`, `medium` or `high`. |
 | `SARVAM_MAX_TOKENS` | `1024` | Maximum length of one answer. |
 | `VOICE_NOTES` | on when `SARVAM_API_KEY` is set | `off` stops transcribing WhatsApp voice notes. |
-| `VOICE_PUBLIC_URL`, `VOICE_PORT` | off, `3002` | Voice agents (website microphone, phone calls) through the voice gateway: its public address and port. More settings in [voice.md](voice.md). |
+| `VOICE_PUBLIC_URL`, `VOICE_PORT` | off, `3002` | Voice agents (website microphone, phone calls) through the voice gateway: its public address and port. More settings in [voice agents](voice.md). |
 | `TTS_PROVIDER`, `SARVAM_TTS_MODEL` | `sarvam` with a key (else `mock`), `bulbul:v2` | Text-to-speech for voice agents. |
 | `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN` | none | Transfer Plivo calls to the owner. |
 | `SARVAM_STT_MODEL`, `SARVAM_STT_URL`, `SARVAM_STT_LANGUAGE` | `saaras:v3`, `https://api.sarvam.ai/speech-to-text`, `unknown` (auto-detect) | Speech-to-text for voice notes. Set the language (e.g. `hi-IN`) only if all your customers speak one language. |
@@ -83,13 +86,13 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `RETRIEVAL_TOP_K` | `6` | How many passages are given to the model per question. |
 | `INGEST_CONCURRENCY`, `INGEST_MAX_ATTEMPTS`, `INGEST_RETRY_BASE_MS` | `2`, `3`, `30000` | Ingestion queue: jobs at once per server, attempts for transient failures, first retry delay (doubles each time). |
 | `INGEST_WORKER` | on | `off` stops this server from running ingestion jobs (for example on a web-only instance). |
-| `ADMIN_EMAILS` | none | Comma-separated e-mails of the first admins. They sign in to the admin app with `ADMIN_PASSWORD` and can add more admins there ([admin.md](admin.md)). |
+| `ADMIN_EMAILS` | none | Comma-separated e-mails of the first admins. They sign in to the admin app with `ADMIN_PASSWORD` and can add more admins there ([admin app](admin.md)). |
 | `ADMIN_PASSWORD` | none | Password for the `ADMIN_EMAILS` admins, 12+ characters (`openssl rand -base64 24`). Blank turns that sign-in off. |
 | `ADMIN_URL` | none | Public address of the admin app, e.g. `https://admin.yourdomain.in`. Starting with `https://` turns on secure admin cookies. |
 | `LLM_PRICES` | none | USD per million input/output tokens by model id, e.g. `gpt-4.1-mini=0.40/1.60, claude-haiku-4-5=1/5`. Used for cost tracking; models without a price show tokens only. |
 | `EMBEDDING_PRICE_PER_MTOK` | none | USD per million embedded tokens. |
 | `USD_INR_RATE` | none | Also show costs in rupees in the admin view (profit figures assume 85 when blank). |
-| `ALERT_EMAILS`, `ALERTS` | all admins, on | Who gets operational alert e-mails; `off` stops the checks. Thresholds: `ALERT_WINDOW_MINUTES`, `ALERT_MIN_ANSWERS`, `ALERT_ERROR_RATE`, `ALERT_P95_MS`, `ALERT_FALLBACK_RATE`, `ALERT_FAILED_SOURCES`, `ALERT_COOLDOWN_MINUTES`, `ALERT_CHECK_MS` (see [admin.md](admin.md)). |
+| `ALERT_EMAILS`, `ALERTS` | all admins, on | Who gets operational alert e-mails; `off` stops the checks. Thresholds: `ALERT_WINDOW_MINUTES`, `ALERT_MIN_ANSWERS`, `ALERT_ERROR_RATE`, `ALERT_P95_MS`, `ALERT_FALLBACK_RATE`, `ALERT_FAILED_SOURCES`, `ALERT_COOLDOWN_MINUTES`, `ALERT_CHECK_MS` (see [admin app](admin.md)). |
 | `LLM_FIRST_TOKEN_TIMEOUT_MS`, `LLM_TIMEOUT_MS` | `20000`, `90000` | Time limits for the first word of an answer and for the whole answer. |
 | `LLM_RETRIES` | `2` | Retries (with backoff) for rate limits, overload, server errors and timeouts, only before any text reaches the customer. |
 | `LLM_FALLBACK_PROVIDER`, `LLM_FALLBACK_MODEL` | off | Backup model used when the main one keeps failing (for example `openai` with a small model). |
@@ -111,7 +114,9 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 | `QUERY_REWRITE`, `QUERY_REWRITE_PROVIDER`, `QUERY_REWRITE_MODEL`, `QUERY_REWRITE_TIMEOUT_MS` | `off`, main provider, main model, `2500` | Rewrite follow-up questions into standalone search queries with a (small) model before searching. |
 | `ANSWER_FIX_MIN_SCORE` | `0.5` | How similar a visitor's question must be to a Q&A answer's question for the owner's answer to be used. Raise it if Q&A answers show up for unrelated questions. |
 
-### WhatsApp (guides: [whatsapp.md](whatsapp.md), [embedded-signup.md](embedded-signup.md))
+### WhatsApp
+
+Guides: [WhatsApp](whatsapp.md) and [Embedded Signup](embedded-signup.md).
 
 | Variable | Default | What it is |
 | --- | --- | --- |
@@ -124,7 +129,9 @@ A typical order: core values, then models, then `pnpm migrate`, then `pnpm prefl
 Set all four `META_*`/verify-token values to enable the **Connect with Facebook** button, or none to keep only the manual
 connection. Manual connections need no variables.
 
-### Billing (guide: [billing-razorpay.md](billing-razorpay.md))
+### Billing
+
+Guide: [Razorpay billing](billing-razorpay.md).
 
 | Variable | What it is |
 | --- | --- |
@@ -132,7 +139,9 @@ connection. Manual connections need no variables.
 | `RAZORPAY_WEBHOOK_SECRET` | The secret you choose when you create the webhook. Without the webhook, paid plans are never activated. |
 | `RAZORPAY_PLAN_STARTER`, `RAZORPAY_PLAN_GROWTH`, `RAZORPAY_PLAN_PRO` | Plan ids printed by `pnpm razorpay:setup`. A tier without an id shows "Not available". |
 
-### E-mail alerts (guide: [handoff.md](handoff.md))
+### E-mail alerts
+
+Guide: [human handoff](handoff.md).
 
 | Variable | Default | What it is |
 | --- | --- | --- |
@@ -155,7 +164,8 @@ A few more variables exist only for the test scripts (they redirect calls to loc
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` / `pnpm build` / `pnpm start` | Development servers / production build / production servers: customer app (3000), admin app (3001), voice gateway (3002). `pnpm dev:web` or `pnpm dev:admin` runs one. |
+| `pnpm dev` / `pnpm build` / `pnpm start` | Development servers / production build / production servers: customer app (3000), admin app (3001), voice gateway (3002), docs site (3003). `pnpm dev:web`, `pnpm dev:admin` or `pnpm dev:docs` runs one. |
+| `pnpm smoke:docs` | Docs site: every page, link, anchor, image and the search index (needs the docs site running) |
 | `pnpm migrate` | Applies database migrations (safe to re-run) |
 | `pnpm preflight [--live] [--email you@x.com]` | Checks `.env` and the database; `--live` also tests the external services |
 | `pnpm razorpay:setup` | Creates the monthly INR plans in Razorpay and prints the `RAZORPAY_PLAN_*` lines |
@@ -163,7 +173,7 @@ A few more variables exist only for the test scripts (they redirect calls to loc
 | `pnpm test` | Unit tests (chunking, encryption, message formatting, handoff phrases, provider helpers) |
 | `pnpm smoke:admin`, `smoke:insights` | Admin sign-in and admins; admin insights, actions and alerts (need the apps running) |
 | `pnpm smoke:voice` | Voice agents: website voice, Plivo and Exotel calls, barge-in, transfers (needs the voice gateway running) |
-| `pnpm smoke`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | End-to-end tests against fake external services. See [testing.md](testing.md). |
+| `pnpm smoke`, `smoke:whatsapp`, `smoke:handoff`, `smoke:embedded`, `smoke:billing`, `smoke:sarvam` | End-to-end tests against fake external services. See [testing](testing.md). |
 
 ## 6. Upgrading
 

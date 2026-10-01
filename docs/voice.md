@@ -89,4 +89,4 @@ Phone-provider message formats change over time: after connecting a number, make
 ## Testing
 
 `pnpm smoke:voice` runs the website, Plivo and Exotel flows against fake Sarvam and Plivo servers: speech → answer →
-speech, first-audio latency, barge-in, handoff, call transfer. See [testing.md](testing.md).
+speech, first-audio latency, barge-in, handoff, call transfer. See [testing](testing.md).

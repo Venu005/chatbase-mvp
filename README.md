@@ -4,11 +4,12 @@ Train an AI support agent on a business's website, PDFs and FAQs, then add it to
 connect it to WhatsApp. A working first version of a Chatbase-style product for Indian small businesses: Hindi, Hinglish
 and regional-language questions, WhatsApp, INR subscriptions, and a human-handoff inbox.
 
-## Product guide
+## Documentation
 
-**[Read the product guide](docs/guide/index.html)**: every feature, how business owners use it (with screenshots), the
-admin app, voice agents, the go-live checklist and test results. Open `docs/guide/index.html` in a browser, or view the
-hosted copy at <https://claude.ai/artifact/KQNYdyoLPstmy9GaFd7joF> (private: ask the repository owner for access).
+The documentation is a site of its own (`apps/docs`, for example at `https://docs.chatbase.in`): a user guide for business
+owners (with screenshots) and everything about running the platform, with search. Run it locally with `pnpm dev:docs` and
+open <http://localhost:3003>, or read the same pages as Markdown in [`docs/`](docs/index.md) (start at
+[docs/index.md](docs/index.md); the site's menu is [docs/site.json](docs/site.json)).
 
 ## What works today
 
@@ -50,7 +51,7 @@ pnpm install
 cp .env.example .env           # then put a real AUTH_SECRET in it:  openssl rand -base64 48
 pnpm migrate
 pnpm preflight                   # checks .env and the database
-pnpm dev                       # customer app http://localhost:3000, admin app http://localhost:3001
+pnpm dev                       # customer app :3000, admin app :3001, voice gateway :3002, docs http://localhost:3003
 ```
 
 With the default `.env` the app uses **mock** models, so you can click through everything without any API key. To get real
@@ -71,7 +72,8 @@ The full variable reference is in [docs/setup.md](docs/setup.md#4-configuration-
 
 | Guide | Read it when you want to |
 | --- | --- |
-| [docs/guide/index.html](docs/guide/index.html) | read the product guide: every feature, how owners use it, go-live checklist (open in a browser) |
+| [docs/index.md](docs/index.md) | the documentation home: the user guide for business owners ([docs/guide/](docs/guide/getting-started.md)) and the platform docs below, also served as a website by `apps/docs` |
+| [docs/go-live.md](docs/go-live.md) | the go-live checklist |
 | [docs/admin.md](docs/admin.md) | the admin app: revenue and profit, growth and churn risk, question quality, operations and alerts, account actions, audit log |
 | [docs/voice.md](docs/voice.md) | voice agents: talk to the assistant on the website and on phone calls (Plivo, Exotel) |
 | [docs/setup.md](docs/setup.md) | install, fill in `.env`, look up any variable or command |
@@ -177,11 +179,13 @@ apps/web/             the customer app (port 3000)
   scripts/            preflight, smoke-*.mjs, eval, razorpay-setup
   eval/               quality eval datasets and baselines
 apps/admin/           the platform-operator dashboard (port 3001), with its own admin sign-in (docs/admin.md)
+apps/docs/            the documentation site (port 3003): renders docs/*.md, with search (docs.chatbase.in)
+apps/voice/           the voice gateway (port 3002): website voice and phone calls (docs/voice.md)
 packages/core/        shared server code: auth, db, env, chunking, ingestion (SSRF-safe fetch), rag, answer (chat
                       pipeline), providers/ (openai, anthropic, sarvam), whatsapp, meta, handoff, notify, crypto, razorpay,
                       billing, plans/usage
   db/migrations/      SQL schema (vector size injected from EMBEDDING_DIM); `pnpm migrate` runs them
   test/               unit tests
 packages/ui/          shared styles and charts
-docs/                 guides (see the table above)
+docs/                 the documentation, in Markdown (site.json = the docs site's menu; guide/ = for business owners)
 ```

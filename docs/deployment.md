@@ -1,8 +1,17 @@
 # Deploying to a server
 
-A small VM is enough to start (2 vCPU, 2-4 GB RAM) plus a Postgres with pgvector. There are two long-running Node
-processes: the customer app (`apps/web`, which also runs the ingestion worker) and the admin app (`apps/admin`), plus the
-voice gateway (`apps/voice`) if you use voice agents. All read the one `.env` at the repo root.
+A small VM is enough to start (2 vCPU, 2-4 GB RAM) plus a Postgres with pgvector. The platform is four Node apps that all
+read the one `.env` at the repo root. Each gets its own address; with `chatbase.in` as the example domain:
+
+| Address | App | Port | Setting |
+| --- | --- | --- | --- |
+| `https://chatbase.in` | Customer app (`apps/web`): sign-up, dashboard, chat widget, webhooks, ingestion worker | 3000 | `APP_URL` |
+| `https://admin.chatbase.in` | Admin app (`apps/admin`): for the platform's operators | 3001 | `ADMIN_URL` |
+| `https://docs.chatbase.in` | Documentation site (`apps/docs`): renders the files in `docs/` | 3003 | `DOCS_URL` |
+| `https://voice.chatbase.in` | Voice gateway (`apps/voice`), only if you use voice agents | 3002 | `VOICE_PUBLIC_URL` |
+
+Point a DNS `A` (or `AAAA`) record for each name at the server. The apps link to each other through these settings: the
+dashboard's **Help** link opens `DOCS_URL`, and the docs' **Open the app** link opens `APP_URL`.
 
 ## Checklist
 
@@ -10,7 +19,7 @@ voice gateway (`apps/voice`) if you use voice agents. All read the one `.env` at
    database and put its URL in `DATABASE_URL` (add `?sslmode=require` for remote databases).
 2. **Environment**: `cp .env.production.example .env`, fill every `REPLACE_ME`, keep `ALLOW_PRIVATE_URLS=false`, use a real
    embedding model, set `APP_URL` to your public https address, and set both `AUTH_SECRET` and `ENCRYPTION_KEY`.
-   For the admin app set `ADMIN_EMAILS`, a long random `ADMIN_PASSWORD` and `ADMIN_URL` ([admin.md](admin.md)).
+   For the admin app set `ADMIN_EMAILS`, a long random `ADMIN_PASSWORD` and `ADMIN_URL` ([admin app](admin.md)).
    Back up `ENCRYPTION_KEY` somewhere safe.
 3. **Install, migrate, build, check**:
    ```bash
@@ -21,7 +30,7 @@ voice gateway (`apps/voice`) if you use voice agents. All read the one `.env` at
    ```
 4. **Run it under a supervisor** (below) and put a **TLS reverse proxy** in front.
 5. **Webhooks** (only for features you use): Meta callback `APP_URL/api/whatsapp/webhook`, Razorpay webhook
-   `APP_URL/api/razorpay/webhook` (see [embedded-signup.md](embedded-signup.md) and [billing-razorpay.md](billing-razorpay.md)).
+   `APP_URL/api/razorpay/webhook` (see [Embedded Signup guide](embedded-signup.md) and [Razorpay billing guide](billing-razorpay.md)).
 6. **Backups**: schedule `pg_dump` (or your provider's backups) and test a restore.
 
 ## Process supervisor (systemd example)
@@ -62,6 +71,23 @@ WantedBy=multi-user.target
 ```
 
 ```ini
+# /etc/systemd/system/chatbase-india-docs.service
+[Unit]
+Description=Chatbase India docs
+After=network.target
+
+[Service]
+WorkingDirectory=/srv/chatbase-india/apps/docs
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3003
+Restart=always
+User=chatbase
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```ini
 # /etc/systemd/system/chatbase-india-voice.service (only for voice agents: docs/voice.md)
 [Unit]
 Description=Chatbase India voice gateway
@@ -84,22 +110,34 @@ other ports.
 ## Reverse proxy (Caddy example, automatic HTTPS)
 
 ```
-chat.yourdomain.in {
+chatbase.in {
     reverse_proxy 127.0.0.1:3000
 }
 
-admin.yourdomain.in {
+www.chatbase.in {
+    redir https://chatbase.in{uri} permanent
+}
+
+admin.chatbase.in {
     # Optional but recommended: only let your office / VPN addresses reach the admin app.
     # @blocked not remote_ip 203.0.113.0/24
     # respond @blocked 404
     reverse_proxy 127.0.0.1:3001
 }
 
-voice.yourdomain.in {
-    # WebSockets pass through; set VOICE_PUBLIC_URL=https://voice.yourdomain.in
+docs.chatbase.in {
+    reverse_proxy 127.0.0.1:3003
+}
+
+voice.chatbase.in {
+    # WebSockets pass through; set VOICE_PUBLIC_URL=https://voice.chatbase.in
     reverse_proxy 127.0.0.1:3002
 }
 ```
+
+Then in `.env`: `APP_URL=https://chatbase.in`, `ADMIN_URL=https://admin.chatbase.in`, `DOCS_URL=https://docs.chatbase.in`
+and `VOICE_PUBLIC_URL=https://voice.chatbase.in`. Rebuild after changing them (`pnpm build`): the docs site reads
+`APP_URL` when it's built.
 
 nginx works too; make it overwrite the client address header so rate limits cannot be dodged:
 `proxy_set_header X-Forwarded-For $remote_addr;`. The app trusts the first `X-Forwarded-For` value, so **only expose the app

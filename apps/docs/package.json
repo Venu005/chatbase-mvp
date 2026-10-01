@@ -1,0 +1,25 @@
+{
+  "name": "@chatbase/docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The documentation site (docs.chatbase.in): renders the Markdown files in /docs.",
+  "scripts": {
+    "dev": "node scripts/copy-assets.mjs && next dev --port 3003",
+    "build": "node scripts/copy-assets.mjs && next build",
+    "start": "next start --port ${DOCS_PORT:-3003}",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/smoke-docs.mjs"
+  },
+  "dependencies": {
+    "marked": "^18.0.14",
+    "next": "^15.5.25",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5.9.3"
+  }
+}
